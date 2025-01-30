@@ -1,0 +1,64 @@
+# General development files
+.vscode/              # VSCode workspace settings
+*.swp                 # Swap files for vim
+*.swo                 # Swap files for vim
+*.log                 # Log files
+*.tmp                 # Temporary files
+*.bak                 # Backup files
+*.pid                 # PID files
+*.seed                # Seed files
+*.pid.lock            # PID lock files
+
+# ROS 2 specific
+build/                # ROS 2 build directory
+install/              # ROS 2 install directory
+log/                  # ROS 2 log directory
+*.rosinstall          # ROS workspace configuration files
+*.repos               # vcstool repos files
+
+# Gazebo specific
+~/.gazebo/            # Gazebo user-specific files
+*.gazebo/             # Gazebo simulation files
+
+# micro-ROS specific
+firmware/             # micro-ROS firmware build directory
+*.elf                 # Compiled ELF files
+*.bin                 # Compiled binary files
+*.hex                 # Compiled HEX files
+*.map                 # Memory map files
+*.lss                 # Listing files
+
+# Arduino specific
+.pio/                 # PlatformIO build directory
+*.pioenvs/            # PlatformIO environment files
+*.piolibdeps/         # PlatformIO library dependencies
+*.pio/build/          # PlatformIO build output
+*.pio/libdeps/        # PlatformIO library dependencies
+*.pio/upload/         # PlatformIO upload files
+
+# Python specific
+__pycache__/          # Python cache files
+*.pyc                 # Python compiled files
+*.pyo                 # Python optimized files
+*.pyd                 # Python dynamic modules
+*.so                  # Shared object files
+*.egg-info/           # Python package metadata
+.pytest_cache/        # Pytest cache
+venv/                 # Python virtual environment
+
+# C/C++ specific
+*.o                   # Object files
+*.a                   # Static libraries
+*.out                 # Compiled output
+*.d                   # Dependency files
+*.dylib               # macOS dynamic libraries
+
+# IDE specific
+.idea/                # JetBrains IDE files
+*.iml                 # IntelliJ module files
+*.suo                 # Visual Studio user options
+*.user                # Visual Studio user files
+
+# System specific
+.DS_Store             # macOS folder metadata
+Thumbs.db             # Windows thumbnail cache
