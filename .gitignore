@@ -1,64 +1,111 @@
 # General development files
-.vscode/              # VSCode workspace settings
-*.swp                 # Swap files for vim
-*.swo                 # Swap files for vim
-*.log                 # Log files
-*.tmp                 # Temporary files
-*.bak                 # Backup files
-*.pid                 # PID files
-*.seed                # Seed files
-*.pid.lock            # PID lock files
+# VSCode workspace settings
+.vscode/
+# Swap files for vim
+*.swp
+# Swap files for vim
+*.swo
+# Log files
+*.log
+# Temporary files
+*.tmp
+# Backup files
+*.bak
+# PID files
+*.pid
+# Seed files
+*.seed
+# PID lock files
+*.pid.lock
 
 # ROS 2 specific
-build/                # ROS 2 build directory
-install/              # ROS 2 install directory
-log/                  # ROS 2 log directory
-*.rosinstall          # ROS workspace configuration files
-*.repos               # vcstool repos files
+# ROS 2 build directory
+build/
+# ROS 2 install directory
+install/
+# ROS 2 log directory
+log/
+# ROS workspace configuration files
+*.rosinstall
+# vcstool repos files
+*.repos
 
 # Gazebo specific
-~/.gazebo/            # Gazebo user-specific files
-*.gazebo/             # Gazebo simulation files
+# Gazebo user-specific files
+~/.gazebo/
+# Gazebo simulation files
+*.gazebo/
 
 # micro-ROS specific
-firmware/             # micro-ROS firmware build directory
-*.elf                 # Compiled ELF files
-*.bin                 # Compiled binary files
-*.hex                 # Compiled HEX files
-*.map                 # Memory map files
-*.lss                 # Listing files
+# micro-ROS firmware build directory
+firmware/
+# Compiled ELF files
+*.elf
+# Compiled binary files
+*.bin
+# Compiled HEX files
+*.hex
+# Memory map files
+*.map
+# Listing files
+*.lss
 
 # Arduino specific
-.pio/                 # PlatformIO build directory
-*.pioenvs/            # PlatformIO environment files
-*.piolibdeps/         # PlatformIO library dependencies
-*.pio/build/          # PlatformIO build output
-*.pio/libdeps/        # PlatformIO library dependencies
-*.pio/upload/         # PlatformIO upload files
+# PlatformIO build directory
+.pio/
+# PlatformIO environment files
+*.pioenvs/
+# PlatformIO library dependencies
+*.piolibdeps/
+# PlatformIO build output
+*.pio/build/
+# PlatformIO library dependencies
+*.pio/libdeps/
+# PlatformIO upload files
+*.pio/upload/
 
 # Python specific
-__pycache__/          # Python cache files
-*.pyc                 # Python compiled files
-*.pyo                 # Python optimized files
-*.pyd                 # Python dynamic modules
-*.so                  # Shared object files
-*.egg-info/           # Python package metadata
-.pytest_cache/        # Pytest cache
-venv/                 # Python virtual environment
+# Python cache files
+__pycache__/
+# Python compiled files
+*.pyc
+# Python optimized files
+*.pyo
+# Python dynamic modules
+*.pyd
+# Shared object files
+*.so
+# Python package metadata
+*.egg-info/
+# Pytest cache
+.pytest_cache/
+# Python virtual environment
+venv/
 
 # C/C++ specific
-*.o                   # Object files
-*.a                   # Static libraries
-*.out                 # Compiled output
-*.d                   # Dependency files
-*.dylib               # macOS dynamic libraries
+# Object files
+*.o
+# Static libraries
+*.a
+# Compiled output
+*.out
+# Dependency files
+*.d
+# macOS dynamic libraries
+*.dylib
 
 # IDE specific
-.idea/                # JetBrains IDE files
-*.iml                 # IntelliJ module files
-*.suo                 # Visual Studio user options
-*.user                # Visual Studio user files
+# JetBrains IDE files
+.idea/
+# IntelliJ module files
+*.iml
+# Visual Studio user options
+*.suo
+# Visual Studio user files
+*.user
 
 # System specific
-.DS_Store             # macOS folder metadata
-Thumbs.db             # Windows thumbnail cache
+# macOS folder metadata
+.DS_Store
+# Windows thumbnail cache
+Thumbs.db
