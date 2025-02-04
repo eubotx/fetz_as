@@ -109,3 +109,7 @@ venv/
 .DS_Store
 # Windows thumbnail cache
 Thumbs.db
+
+#WSL2 mounted drives
+# Ignore .zone.identifier files
+*:Zone.Identifier
