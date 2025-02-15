@@ -1,5 +1,5 @@
 Steps:
-adjust wheel size and wheel base in esp32 code
+adjust wheel size and wheel base and gear ratio in esp32 code
 flash code
 add config yaml for speed x and yaw
 drive
