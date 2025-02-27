@@ -148,6 +148,38 @@ private:
     int motorPwm = 0; // Motor PWM duty cycle
 };
 
+// RobotControl Class
+class RobotControl {
+public:
+    Wheel leftWheel;
+    Wheel rightWheel;
+    unsigned long lastUpdateTime = 0;
+    double linearSpeed = 0;
+    double angularSpeed = 0;
+
+    RobotControl(PIDController pidLeft, PIDController pidRight)
+        : leftWheel(LEFT_ENCODER_C1_PIN, LEFT_ENCODER_C2_PIN, MOTORCONTROLLER_IN1_PIN, MOTORCONTROLLER_IN2_PIN, pidLeft),
+          rightWheel(RIGHT_ENCODER_C1_PIN, RIGHT_ENCODER_C2_PIN, MOTORCONTROLLER_IN3_PIN, MOTORCONTROLLER_IN4_PIN, pidRight) {}
+
+    void calculateWheelSpeeds(float linear, float angular) {
+        double linearWheelSpeed = (2.0 * linear) / WHEEL_DIAMETER;
+        double angularWheelSpeed = (angular * WHEEL_DISTANCE) / (WHEEL_DIAMETER / 2.0);
+        double linearMotorSpeed = linearWheelSpeed * GEARBOX_RATIO;
+        double angularMotorSpeed = angularWheelSpeed * GEARBOX_RATIO;
+
+        leftWheel.updateMotorSpeed(linearMotorSpeed - angularMotorSpeed, leftWheel.getMeasuredSpeed(leftWheel.encoder.getCount(), leftWheel.encoder.lastCount, millis() - lastUpdateTime), millis() - lastUpdateTime);
+        rightWheel.updateMotorSpeed(linearMotorSpeed + angularMotorSpeed, rightWheel.getMeasuredSpeed(rightWheel.encoder.getCount(), rightWheel.encoder.lastCount, millis() - lastUpdateTime), millis() - lastUpdateTime);
+    }
+
+    void update() {
+        unsigned long currentTime = millis();
+        if (currentTime - lastUpdateTime >= 2) {
+            lastUpdateTime = currentTime;
+            // Update motor speeds based on control logic
+        }
+    }
+};
+
 
 void setup() {
     // Initialization code (setup micro-ROS, etc.)
