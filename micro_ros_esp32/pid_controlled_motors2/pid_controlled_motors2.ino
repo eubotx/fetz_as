@@ -12,20 +12,20 @@
 #include <algorithm> // For std::sort
 
 // Debug macros (uncomment to enable)
-#define DEBUG_MOTORCONTROL_LEFT    // Enable left debug topic
-#define DEBUG_MOTORCONTROL_RIGHT   // Enable right debug topic
+#define DEBUG_DRIVE_LEFT    // Enable left debug topic
+#define DEBUG_DRIVE_RIGHT   // Enable right debug topic
 //#define DEBUG_LOOPTIME             // Enable loop time debug topic
 
 
 // Robot parameters
 constexpr double WHEEL_DIAMETER = 0.04;
 constexpr double WHEEL_DISTANCE = 0.12;
-constexpr double MAX_MOTOR_SPEED = 65;  // Max speed in RPS
-constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 255;
+constexpr double MAX_MOTOR_SPEED = 65.0;  // Max speed in RPS
+constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 250;
 constexpr int ENCODER_TICKS_PER_REVOLUTION = 12 * 2;
-constexpr double GEARBOX_RATIO = 200.0;
+constexpr double GEARBOX_RATIO = 1.0/200.0;
 
-constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 2;
+constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 2;  // In ms
 
 // PID controller parameters
 constexpr double KP = 3.0;
@@ -52,13 +52,13 @@ constexpr int MOTORCONTROLLER_IN4_PIN = 26;
 
 // ROS2 entities
 
-#ifdef DEBUG_MOTORCONTROL_LEFT
-rcl_publisher_t debugMotorcontrolLeftPublisher;
+#ifdef DEBUG_DRIVE_LEFT
+rcl_publisher_t debugDriveLeftPublisher;
 std_msgs__msg__Float64MultiArray debugMotorcontrolLeftMsg;
 #endif
 
-#ifdef DEBUG_MOTORCONTROL_RIGHT
-rcl_publisher_t debugMotorcontrolRightPublisher; 
+#ifdef DEBUG_DRIVE_RIGHT
+rcl_publisher_t debugDriveRightPublisher; 
 std_msgs__msg__Float64MultiArray debugMotorcontrolRightMsg;
 #endif
 
@@ -99,9 +99,15 @@ public:
 
     void update() {
         long currentCount = encoder.getCount();
-        long delta = currentCount - lastCount;
+        long currentTime = micros();
+        
+        long deltaCount = currentCount - lastCount;
+        unsigned long deltaTime = currentTime - lastTime;
+        rps = (deltaCount / (double)ticksPerRevolution) / (deltaTime / 1000000.0);
+        
         lastCount = currentCount;
-        speed = ((double) delta) / ticksPerRevolution / (micros() / 1000000.0);
+        lastTime = currentTime;
+        
     }
 
     void resetCount() {
@@ -109,7 +115,7 @@ public:
     }
 
     double getSpeed() const {
-        return speed;
+        return rps;
     }
 
     double getAngularPosition(){
@@ -121,7 +127,8 @@ private:
     int pin1, pin2;
     double ticksPerRevolution;
     long lastCount = 0;
-    double speed = 0;
+    unsigned long lastTime = 0;
+    double rps = 0;
 };
 
 // MotorDriver class
@@ -148,7 +155,7 @@ public:
     }
 
     void setMotorDutyCycle(int dutyCycle){
-        this->dutyCycle = constrain(dutyCycle, -maxDutyCycle, maxDutyCycle);
+        this->dutyCycle = (int)constrain(dutyCycle, -maxDutyCycle, maxDutyCycle);
     }
 
     int getMotorDutyCycle() const { return dutyCycle; }
@@ -175,6 +182,10 @@ public:
         lastTime = micros();
 
         return (Kp * error) + (Ki * integral) + (Kd * derivative);
+    }
+
+    void pause(){
+      lastTime = micros();
     }
 
     void pidReset() {
@@ -221,15 +232,28 @@ public:
     PidMotor(Encoder& encoder, MotorDriver& motorDriver, PIDController& pid, unsigned int controllCycleTime)
         : encoder(encoder), motorDriver(motorDriver), pid(pid), controllCycleTime(controllCycleTime) {}
 
+    void init(){
+      encoder.init();
+      motorDriver.init();
+    }
+    
     void update() {
         unsigned long currentTime = millis();
         if (currentTime - lastUpdateTime >= controllCycleTime) {
 
             lastUpdateTime = currentTime;
 
-            encoder.update(); // Update encoder readings        
-            int pidValue = int(round(pid.compute(desiredMotorSpeed, encoder.getSpeed()))); // Apply PID control
-            motorDriver.setMotorDutyCycle(motorDriver.getMotorDutyCycle() + pidValue); // Set motor speed based on PWM
+            encoder.update(); // Update encoder readings
+
+            if (desiredMotorSpeed == 0.0){
+              motorDriver.setMotorDutyCycle(0);
+              pid.pidReset();
+            }
+            else {
+              int pidValue = int(round(pid.compute(desiredMotorSpeed, encoder.getSpeed()))); // Apply PID control
+              motorDriver.setMotorDutyCycle(motorDriver.getMotorDutyCycle() + pidValue); // Set motor speed based on PWM
+            }
+            
             motorDriver.update();
 
         }
@@ -265,6 +289,10 @@ public:
     Wheel(PidMotor& pidMotor, double gearboxRatio)
         : pidMotor(pidMotor), gearboxRatio(gearboxRatio) {}
 
+    void init(){
+      pidMotor.init();
+    }
+    
     void update() {
         pidMotor.update();
     }
@@ -272,7 +300,7 @@ public:
     void setDesiredWheelSpeed(double desiredWheelSpeed) {
         this->desiredWheelSpeed = desiredWheelSpeed; // Set wheel speed
         // Convert wheel speed to motor speed using the gearbox ratio
-        pidMotor.setDesiredMotorSpeed(desiredWheelSpeed * gearboxRatio);
+        pidMotor.setDesiredMotorSpeed(desiredWheelSpeed / gearboxRatio);
     }
 
     double getDesiredWheelSpeed() const {
@@ -280,11 +308,11 @@ public:
     }
 
     double getMeasuredWheelSpeed() {
-        return pidMotor.getMeasuredMotorSpeed() / gearboxRatio;
+        return pidMotor.getMeasuredMotorSpeed() * gearboxRatio;
     }
 
     double getAngularPosition() {
-        return pidMotor.getAngularMotorPosition() / gearboxRatio;
+        return pidMotor.getAngularMotorPosition() * gearboxRatio;
     }
 
 private:
@@ -299,6 +327,11 @@ class RobotControl {
 public:
     RobotControl(Wheel& leftWheel, Wheel& rightWheel, double wheelDiameter, double wheelDistance)
         : leftWheel(leftWheel), rightWheel(rightWheel), wheelDiameter(wheelDiameter), wheelDistance(wheelDistance) {}
+
+    void init(){
+      leftWheel.init();
+      rightWheel.init();
+    }
 
     void calculateAndSetWheelSpeeds(double linear, double angular) {
         double linearWheelSpeed = (2.0 * linear) / wheelDiameter;
@@ -373,22 +406,22 @@ void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
     RCLC_UNUSED(last_call_time);
     if (timer != NULL) {
 
-#ifdef DEBUG_MOTORCONTROL_LEFT
+#ifdef DEBUG_DRIVE_LEFT
         // Publish left debug information (PID + PWM)
         debugMotorcontrolLeftMsg.data.data[0] = leftMotor.getDesiredMotorSpeed();  // Desired value
         debugMotorcontrolLeftMsg.data.data[1] = leftMotor.getMeasuredMotorSpeed(); // Measured value
         debugMotorcontrolLeftMsg.data.data[2] = leftMotor.getDesiredMotorSpeed() - leftMotor.getMeasuredMotorSpeed(); // Error
         debugMotorcontrolLeftMsg.data.data[3] = leftMotorDriver.getMotorDutyCycle(); // PWM duty cycle
-        RCSOFTCHECK(rcl_publish(&debugMotorcontrolLeftPublisher, &debugMotorcontrolLeftMsg, NULL));
+        RCSOFTCHECK(rcl_publish(&debugDriveLeftPublisher, &debugMotorcontrolLeftMsg, NULL));
 #endif
 
-#ifdef DEBUG_MOTORCONTROL_RIGHT
+#ifdef DEBUG_DRIVE_RIGHT
         // Publish right debug information (PID + PWM)
         debugMotorcontrolRightMsg.data.data[0] = rightMotor.getDesiredMotorSpeed();  // Desired value
         debugMotorcontrolRightMsg.data.data[1] = rightMotor.getMeasuredMotorSpeed(); // Measured value
         debugMotorcontrolRightMsg.data.data[2] = rightMotor.getDesiredMotorSpeed() - rightMotor.getMeasuredMotorSpeed(); // Error
         debugMotorcontrolRightMsg.data.data[3] = rightMotorDriver.getMotorDutyCycle(); // PWM duty cycle
-        RCSOFTCHECK(rcl_publish(&debugMotorcontrolRightPublisher, &debugMotorcontrolRightMsg, NULL));
+        RCSOFTCHECK(rcl_publish(&debugDriveRightPublisher, &debugMotorcontrolRightMsg, NULL));
 #endif
 
 #ifdef DEBUG_LOOPTIME
@@ -448,33 +481,33 @@ void pid_tuning_callback(const void* msgin) {
 void setup() {
     set_microros_wifi_transports((char*)MY_SSID, (char*)MY_PASSWORD, (char*)MY_IP, MY_PORT);
 
-
+    robot.init();
 
     allocator = rcl_get_default_allocator();
     RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
     RCCHECK(rclc_node_init_default(&node, "diff_drive_bot_esp32", "", &support));
     RCCHECK(rclc_subscription_init_default(&twistSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), "cmd_vel"));
 
-#ifdef DEBUG_MOTORCONTROL_LEFT
+#ifdef DEBUG_DRIVE_LEFT
     // Initialize left debug publisher
     RCCHECK(rclc_publisher_init_default(
-        &debugMotorcontrolLeftPublisher,
+        &debugDriveLeftPublisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray),
-        "left_debug"
+        "drive/left/debug"
     ));
     debugMotorcontrolLeftMsg.data.capacity = 4;
     debugMotorcontrolLeftMsg.data.size = 4;
     debugMotorcontrolLeftMsg.data.data = (double*)malloc(4 * sizeof(double));
 #endif
 
-#ifdef DEBUG_MOTORCONTROL_RIGHT
+#ifdef DEBUG_DRIVE_RIGHT
     // Initialize right debug publisher
     RCCHECK(rclc_publisher_init_default(
-        &debugMotorcontrolRightPublisher,
+        &debugDriveRightPublisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray),
-        "right_debug"
+        "drive/right/debug"
     ));
     debugMotorcontrolRightMsg.data.capacity = 4;
     debugMotorcontrolRightMsg.data.size = 4;
@@ -499,7 +532,7 @@ void setup() {
         &pidTuningSubscriber,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray),
-        "pid_tuning"
+        "drive/pid_tuning"
     ));
 
 
