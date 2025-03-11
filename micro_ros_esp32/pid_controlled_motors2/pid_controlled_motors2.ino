@@ -15,6 +15,7 @@
 #define DEBUG_DRIVE_LEFT    // Enable left debug topic
 #define DEBUG_DRIVE_RIGHT   // Enable right debug topic
 //#define DEBUG_LOOPTIME             // Enable loop time debug topic
+//#define DEBUG_PID_TUNING
 
 
 // Robot parameters
@@ -25,10 +26,10 @@ constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 250;
 constexpr int ENCODER_TICKS_PER_REVOLUTION = 12 * 2;
 constexpr double GEARBOX_RATIO = 1.0/200.0;
 
-constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 2;  // In ms
+constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 10;  // In ms
 
 // PID controller parameters
-constexpr double KP = 3.0;
+constexpr double KP = 1.0;
 constexpr double KI = 0.5;
 constexpr double KD = 0.0;
 constexpr double KI_MAX = 30.0;
@@ -45,10 +46,13 @@ constexpr int LEFT_ENCODER_C1_PIN = 23;
 constexpr int LEFT_ENCODER_C2_PIN = 22;
 constexpr int RIGHT_ENCODER_C1_PIN = 19;
 constexpr int RIGHT_ENCODER_C2_PIN = 18;
-constexpr int MOTORCONTROLLER_IN1_PIN = 14;
-constexpr int MOTORCONTROLLER_IN2_PIN = 27;
-constexpr int MOTORCONTROLLER_IN3_PIN = 25;
-constexpr int MOTORCONTROLLER_IN4_PIN = 26;
+constexpr int MOTORDRIVER_IN1_PIN = 14;
+constexpr int MOTORDRIVER_IN2_PIN = 27;
+constexpr int MOTORDRIVER_IN3_PIN = 25;
+constexpr int MOTORDRIVER_IN4_PIN = 26;
+constexpr int MOTORDRIVER_ENA_PIN = 33;
+constexpr int MOTORDRIVER_ENB_PIN = 32;
+
 
 // ROS2 entities
 
@@ -65,6 +69,11 @@ std_msgs__msg__Float64MultiArray debugMotorcontrolRightMsg;
 #ifdef DEBUG_LOOPTIME
 rcl_publisher_t debugLooptimePublisher;
 std_msgs__msg__Float64MultiArray debugLooptimeMsg;
+#endif
+
+#ifdef DEBUG_PID_TUNING
+rcl_publisher_t pidTuningPublisher;
+std_msgs__msg__Float64MultiArray pidTuningPubMsg;
 #endif
 
 rcl_subscription_t twistSubscriber;
@@ -134,23 +143,27 @@ private:
 // MotorDriver class
 class MotorDriver {
 public:
-    MotorDriver(int pin1, int pin2, const int maxDutyCycle) : pin1(pin1), pin2(pin2), maxDutyCycle(maxDutyCycle), dutyCycle(0) {}
+    MotorDriver(int pin1, int pin2, int pin3, const int maxDutyCycle) : pin1(pin1), pin2(pin2), pin3(pin3), maxDutyCycle(maxDutyCycle), dutyCycle(0) {}
 
     void init(){
         pinMode(pin1, OUTPUT);
         pinMode(pin2, OUTPUT);
+        pinMode(pin3, OUTPUT);
     }
 
     void update() {
         if (dutyCycle > 0) {
             digitalWrite(pin2, LOW);
-            analogWrite(pin1, dutyCycle);
+            digitalWrite(pin1, HIGH);
+            analogWrite(pin3, abs(dutyCycle));
         } else if (dutyCycle < 0) {
             digitalWrite(pin1, LOW);
-            analogWrite(pin2, -dutyCycle);
+            digitalWrite(pin2, HIGH);
+            analogWrite(pin3, abs(dutyCycle));
         } else {
             digitalWrite(pin1, LOW);
             digitalWrite(pin2, LOW);
+            digitalWrite(pin3, LOW);
         }
     }
 
@@ -161,7 +174,7 @@ public:
     int getMotorDutyCycle() const { return dutyCycle; }
 
 private:
-    int pin1, pin2;
+    int pin1, pin2, pin3;
     int dutyCycle;
     int maxDutyCycle;
 };
@@ -246,12 +259,17 @@ public:
             encoder.update(); // Update encoder readings
 
             if (desiredMotorSpeed == 0.0){
-              motorDriver.setMotorDutyCycle(0);
-              pid.pidReset();
+              standstillTime ++;
+
+              if (standstillTime > 100) {
+                motorDriver.setMotorDutyCycle(0);
+                pid.pidReset();
+              }
             }
             else {
               int pidValue = int(round(pid.compute(desiredMotorSpeed, encoder.getSpeed()))); // Apply PID control
               motorDriver.setMotorDutyCycle(motorDriver.getMotorDutyCycle() + pidValue); // Set motor speed based on PWM
+              standstillTime = 0;
             }
             
             motorDriver.update();
@@ -282,6 +300,7 @@ private:
     double desiredMotorSpeed = 0; // Desired motor speed (RPS)
     unsigned long controllCycleTime;
     unsigned long lastUpdateTime = 0;
+    unsigned long standstillTime = 0;
 };
 
 class Wheel {
@@ -326,22 +345,26 @@ private:
 class RobotControl {
 public:
     RobotControl(Wheel& leftWheel, Wheel& rightWheel, double wheelDiameter, double wheelDistance)
-        : leftWheel(leftWheel), rightWheel(rightWheel), wheelDiameter(wheelDiameter), wheelDistance(wheelDistance) {}
+        : leftWheel(leftWheel), rightWheel(rightWheel), wheelDiameter(wheelDiameter), wheelRadius(wheelDiameter/2.), wheelDistance(wheelDistance) {}
 
     void init(){
       leftWheel.init();
       rightWheel.init();
     }
-
+    
     void calculateAndSetWheelSpeeds(double linear, double angular) {
-        double linearWheelSpeed = (2.0 * linear) / wheelDiameter;
-        double angularWheelSpeed = (angular * wheelDistance) / (wheelDiameter / 2.0);
-
-        double lefttWheelSpeed = linearWheelSpeed - angularWheelSpeed;
-        double rightWheelSpeed = linearWheelSpeed + angularWheelSpeed;
+        double linearWheelSpeed = linear;
+        double angularWheelSpeed = angular * (wheelDistance / 2.0);
         
-        leftWheel.setDesiredWheelSpeed(lefttWheelSpeed);
-        rightWheel.setDesiredWheelSpeed(rightWheelSpeed);
+        double leftWheelSpeed = linearWheelSpeed - angularWheelSpeed;
+        double rightWheelSpeed = linearWheelSpeed + angularWheelSpeed;
+
+        // Convert the wheel speeds from m/s to rps
+        double leftWheelRps = leftWheelSpeed / (M_PI * wheelDiameter);
+        double rightWheelRps = rightWheelSpeed / (M_PI * wheelDiameter);
+        
+        leftWheel.setDesiredWheelSpeed(leftWheelRps);
+        rightWheel.setDesiredWheelSpeed(rightWheelRps);
     }
 
     void updateDrives() {
@@ -352,6 +375,7 @@ public:
     private:
         Wheel& leftWheel;
         Wheel& rightWheel;
+        const double wheelRadius;
         const double wheelDiameter;
         const double wheelDistance;
 
@@ -382,8 +406,8 @@ Encoder leftEncoder(LEFT_ENCODER_C1_PIN, LEFT_ENCODER_C2_PIN, ENCODER_TICKS_PER_
 Encoder rightEncoder(RIGHT_ENCODER_C1_PIN, RIGHT_ENCODER_C2_PIN, ENCODER_TICKS_PER_REVOLUTION);
 
 // Initialize motor controllers
-MotorDriver leftMotorDriver(MOTORCONTROLLER_IN1_PIN, MOTORCONTROLLER_IN2_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE);
-MotorDriver rightMotorDriver(MOTORCONTROLLER_IN3_PIN, MOTORCONTROLLER_IN4_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE);
+MotorDriver leftMotorDriver(MOTORDRIVER_IN1_PIN, MOTORDRIVER_IN2_PIN, MOTORDRIVER_ENA_PIN,  MAX_MOTOR_DRIVER_DUTYCYCLE);
+MotorDriver rightMotorDriver(MOTORDRIVER_IN3_PIN, MOTORDRIVER_IN4_PIN, MOTORDRIVER_ENB_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE);
 
 // Initialize PID controllers
 PIDController leftPid(KP, KI, KD, KI_MAX);
@@ -449,6 +473,24 @@ void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
         debugLooptimeMsg.data.data[3] = averageLoopTime; // Average
         RCSOFTCHECK(rcl_publish(&debugLooptimePublisher, &debugLooptimeMsg, NULL));
 #endif
+
+#ifdef DEBUG_PID_TUNING
+      // Left motor PID tuning values
+      pidTuningPubMsg.data.data[0] = leftPid.getKp();   // Left motor Kp
+      pidTuningPubMsg.data.data[1] = leftPid.getKi();   // Left motor Ki
+      pidTuningPubMsg.data.data[2] = leftPid.getKd();   // Left motor Kd
+      pidTuningPubMsg.data.data[3] = leftPid.getKiMax(); // Left motor KiMax
+  
+      // Right motor PID tuning values
+      pidTuningPubMsg.data.data[4] = rightPid.getKp();  // Right motor Kp
+      pidTuningPubMsg.data.data[5] = rightPid.getKi();  // Right motor Ki
+      pidTuningPubMsg.data.data[6] = rightPid.getKd();  // Right motor Kd
+      pidTuningPubMsg.data.data[7] = rightPid.getKiMax(); // Right motor KiMax
+  
+      // Publish the PID tuning values
+      RCSOFTCHECK(rcl_publish(&pidTuningPublisher, &pidTuningPubMsg, NULL));
+#endif
+
     }
 }
 
@@ -463,6 +505,7 @@ void pid_tuning_callback(const void* msgin) {
     const std_msgs__msg__Float64MultiArray* msg = (const std_msgs__msg__Float64MultiArray*)msgin;
 
     // Ensure the message contains exactly 4 values (Kp, Ki, Kd, KiMax)
+    
     if (msg->data.size == 4) {
         double Kp = msg->data.data[0];
         double Ki = msg->data.data[1];
@@ -471,9 +514,7 @@ void pid_tuning_callback(const void* msgin) {
 
         // Update PID parameters for both left and right controllers
         leftPid.setPidValues(Kp, Ki, Kd, KiMax);
-        leftPid.pidReset();
         rightPid.setPidValues(Kp, Ki, Kd, KiMax);
-        rightPid.pidReset();
     }
 }
 
@@ -483,10 +524,16 @@ void setup() {
 
     robot.init();
 
+    //Serial.begin(9600);
+
     allocator = rcl_get_default_allocator();
     RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
     RCCHECK(rclc_node_init_default(&node, "diff_drive_bot_esp32", "", &support));
     RCCHECK(rclc_subscription_init_default(&twistSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), "cmd_vel"));
+    RCCHECK(rclc_subscription_init_default(&pidTuningSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray), "drive/pid_tuning"));
+    pidTuningMsg.data.capacity = 4;  // 4 values for the left and right PID tuning (Kp, Ki, Kd, KiMax)
+    pidTuningMsg.data.size = 4;      // 8 values total (4 for left, 4 for right)
+    pidTuningMsg.data.data = (double*)malloc(4 * sizeof(double)); // Allocate memory for 8 values
 
 #ifdef DEBUG_DRIVE_LEFT
     // Initialize left debug publisher
@@ -527,14 +574,18 @@ void setup() {
     debugLooptimeMsg.data.data = (double*)malloc(4 * sizeof(double));
 #endif
 
-    // Initialize the PID tuning subscriber
-    RCCHECK(rclc_subscription_init_default(
-        &pidTuningSubscriber,
+#ifdef DEBUG_PID_TUNING
+    // Initialize PID tuning publisher
+    RCCHECK(rclc_publisher_init_default(
+        &pidTuningPublisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray),
-        "drive/pid_tuning"
+        "drive/pid_tuning_pub"  // Topic name
     ));
-
+    pidTuningPubMsg.data.capacity = 8;  // 4 values for the left and right PID tuning (Kp, Ki, Kd, KiMax)
+    pidTuningPubMsg.data.size = 8;      // 8 values total (4 for left, 4 for right)
+    pidTuningPubMsg.data.data = (double*)malloc(8 * sizeof(double)); // Allocate memory for 8 values
+#endif
 
     const unsigned int timerTimeout = 100;
     RCCHECK(rclc_timer_init_default2(&timer, &support, RCL_MS_TO_NS(timerTimeout), timer_callback, true));
