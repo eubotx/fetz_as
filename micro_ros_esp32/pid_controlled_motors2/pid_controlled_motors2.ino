@@ -25,10 +25,10 @@ constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 250;
 constexpr int ENCODER_TICKS_PER_REVOLUTION = 12 * 2;
 constexpr double GEARBOX_RATIO = 1.0/200.0;
 
-constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 10;  // In ms
+constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 2;  // In ms
 
 // PID controller parameters
-constexpr double KP = 1.0;
+constexpr double KP = 10.0;
 constexpr double KI = 0.5;
 constexpr double KD = 0.0;
 constexpr double KI_MAX = 30.0;
@@ -185,15 +185,15 @@ public:
         : Kp(Kp), Ki(Ki), Kd(Kd), KiMax(KiMax), error(0), integral(0), derivative(0), previousError(0) {}
 
     double compute(double desiredValue, double measuredValue) {
+        double deltaTime = (micros() - lastTime) / 1000000.0;
         error = desiredValue - measuredValue;
-        double deltaTime = (double)(micros() - lastTime) / 1000000.0;
-        integral += error * deltaTime;
+        integral = integral + error;
         integral = constrain(integral, -KiMax, KiMax);  // Anti-windup
-        derivative = error - previousError * deltaTime;
+        derivative = error - previousError;
         previousError = error;
         lastTime = micros();
 
-        return (Kp * error) + (Ki * integral) + (Kd * derivative);
+        return ((Kp * error) + (Ki * integral) + (Kd * derivative)) * deltaTime;
     }
 
     void pause(){
@@ -259,20 +259,18 @@ public:
 
             if (desiredMotorSpeed == 0.0){
               motorTimeoutThresh ++;
-
-              if (motorTimeoutThresh > 100) {   // equals 100 * controllCycleTime until motors go to sleep
-                motorDriver.stop();
-                pid.pidReset();
-              }
-            }
-            else {
-              int pidValue = int(round(pid.compute(desiredMotorSpeed, encoder.getSpeed()))); // Apply PID control   //TODO ist round wirklich auf vor dezimal?
-              motorDriver.setMotorDutyCycle(motorDriver.getMotorDutyCycle() + pidValue); // Set motor speed based on PWM
+            } else {
               motorTimeoutThresh = 0;
             }
             
-            motorDriver.update();
-
+            if (motorTimeoutThresh > 100) {   // equals 100 * controllCycleTime until motors go to sleep
+              motorDriver.stop();
+              pid.pidReset();
+            } else {
+              int pidValue = int(round(pid.compute(desiredMotorSpeed, encoder.getSpeed()))); // Apply PID control   //TODO ist round wirklich auf vor dezimal?
+              motorDriver.setMotorDutyCycle(motorDriver.getMotorDutyCycle() + pidValue); // Set motor speed based on PWM
+              motorDriver.update();
+            }
         }
     }
 
@@ -405,8 +403,8 @@ Encoder leftEncoder(LEFT_ENCODER_C1_PIN, LEFT_ENCODER_C2_PIN, ENCODER_TICKS_PER_
 Encoder rightEncoder(RIGHT_ENCODER_C1_PIN, RIGHT_ENCODER_C2_PIN, ENCODER_TICKS_PER_REVOLUTION);
 
 // Initialize motor controllers
-MotorDriver leftMotorDriver(MOTORDRIVER_IN1_PIN, MOTORDRIVER_IN2_PIN, MOTORDRIVER_ENA_PIN,  MAX_MOTOR_DRIVER_DUTYCYCLE);
-MotorDriver rightMotorDriver(MOTORDRIVER_IN3_PIN, MOTORDRIVER_IN4_PIN, MOTORDRIVER_ENB_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE);
+MotorDriver leftMotorDriver(MOTORDRIVER_IN1_PIN, MOTORDRIVER_IN2_PIN, MOTORDRIVER_ENB_PIN,  MAX_MOTOR_DRIVER_DUTYCYCLE);
+MotorDriver rightMotorDriver(MOTORDRIVER_IN3_PIN, MOTORDRIVER_IN4_PIN, MOTORDRIVER_ENA_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE);
 
 // Initialize PID controllers
 PIDController leftPid(KP, KI, KD, KI_MAX);
