@@ -15,7 +15,6 @@
 #define DEBUG_DRIVE_LEFT    // Enable left debug topic
 #define DEBUG_DRIVE_RIGHT   // Enable right debug topic
 //#define DEBUG_LOOPTIME             // Enable loop time debug topic
-//#define DEBUG_PID_TUNING
 
 
 // Robot parameters
@@ -69,11 +68,6 @@ std_msgs__msg__Float64MultiArray debugMotorcontrolRightMsg;
 #ifdef DEBUG_LOOPTIME
 rcl_publisher_t debugLooptimePublisher;
 std_msgs__msg__Float64MultiArray debugLooptimeMsg;
-#endif
-
-#ifdef DEBUG_PID_TUNING
-rcl_publisher_t pidTuningPublisher;
-std_msgs__msg__Float64MultiArray pidTuningPubMsg;
 #endif
 
 rcl_subscription_t twistSubscriber;
@@ -143,7 +137,7 @@ private:
 // MotorDriver class
 class MotorDriver {
 public:
-    MotorDriver(int pin1, int pin2, int pin3, const int maxDutyCycle) : pin1(pin1), pin2(pin2), pin3(pin3), maxDutyCycle(maxDutyCycle), dutyCycle(0) {}
+    MotorDriver(int pin1, int pin2, int pin3, const int maxDutyCycle) : pin1(pin1), pin2(pin2), pin3(pin3), maxDutyCycle(maxDutyCycle) {}
 
     void init(){
         pinMode(pin1, OUTPUT);
@@ -161,10 +155,15 @@ public:
             digitalWrite(pin2, HIGH);
             analogWrite(pin3, abs(dutyCycle));
         } else {
-            digitalWrite(pin1, LOW);
-            digitalWrite(pin2, LOW);
-            digitalWrite(pin3, LOW);
+            digitalWrite(pin3, LOW);    //TODO was ist hier richtig damit der motor nicht hard stoppt, mal so probieren
+            //alogWrite(pin3, abs(dutyCycle));  //oder so
         }
+    }
+
+    void stop() {
+        digitalWrite(pin1, LOW);
+        digitalWrite(pin2, LOW);
+        digitalWrite(pin3, LOW);
     }
 
     void setMotorDutyCycle(int dutyCycle){
@@ -175,7 +174,7 @@ public:
 
 private:
     int pin1, pin2, pin3;
-    int dutyCycle;
+    int dutyCycle = 0;
     int maxDutyCycle;
 };
 
@@ -256,20 +255,20 @@ public:
 
             lastUpdateTime = currentTime;
 
-            encoder.update(); // Update encoder readings
+            encoder.update();
 
             if (desiredMotorSpeed == 0.0){
-              standstillTime ++;
+              motorTimeoutThresh ++;
 
-              if (standstillTime > 100) {
-                motorDriver.setMotorDutyCycle(0);
+              if (motorTimeoutThresh > 100) {   // equals 100 * controllCycleTime until motors go to sleep
+                motorDriver.stop();
                 pid.pidReset();
               }
             }
             else {
-              int pidValue = int(round(pid.compute(desiredMotorSpeed, encoder.getSpeed()))); // Apply PID control
+              int pidValue = int(round(pid.compute(desiredMotorSpeed, encoder.getSpeed()))); // Apply PID control   //TODO ist round wirklich auf vor dezimal?
               motorDriver.setMotorDutyCycle(motorDriver.getMotorDutyCycle() + pidValue); // Set motor speed based on PWM
-              standstillTime = 0;
+              motorTimeoutThresh = 0;
             }
             
             motorDriver.update();
@@ -300,7 +299,7 @@ private:
     double desiredMotorSpeed = 0; // Desired motor speed (RPS)
     unsigned long controllCycleTime;
     unsigned long lastUpdateTime = 0;
-    unsigned long standstillTime = 0;
+    unsigned long motorTimeoutThresh = 0;
 };
 
 class Wheel {
@@ -474,23 +473,6 @@ void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
         RCSOFTCHECK(rcl_publish(&debugLooptimePublisher, &debugLooptimeMsg, NULL));
 #endif
 
-#ifdef DEBUG_PID_TUNING
-      // Left motor PID tuning values
-      pidTuningPubMsg.data.data[0] = leftPid.getKp();   // Left motor Kp
-      pidTuningPubMsg.data.data[1] = leftPid.getKi();   // Left motor Ki
-      pidTuningPubMsg.data.data[2] = leftPid.getKd();   // Left motor Kd
-      pidTuningPubMsg.data.data[3] = leftPid.getKiMax(); // Left motor KiMax
-  
-      // Right motor PID tuning values
-      pidTuningPubMsg.data.data[4] = rightPid.getKp();  // Right motor Kp
-      pidTuningPubMsg.data.data[5] = rightPid.getKi();  // Right motor Ki
-      pidTuningPubMsg.data.data[6] = rightPid.getKd();  // Right motor Kd
-      pidTuningPubMsg.data.data[7] = rightPid.getKiMax(); // Right motor KiMax
-  
-      // Publish the PID tuning values
-      RCSOFTCHECK(rcl_publish(&pidTuningPublisher, &pidTuningPubMsg, NULL));
-#endif
-
     }
 }
 
@@ -572,19 +554,6 @@ void setup() {
     debugLooptimeMsg.data.capacity = 4;
     debugLooptimeMsg.data.size = 4;
     debugLooptimeMsg.data.data = (double*)malloc(4 * sizeof(double));
-#endif
-
-#ifdef DEBUG_PID_TUNING
-    // Initialize PID tuning publisher
-    RCCHECK(rclc_publisher_init_default(
-        &pidTuningPublisher,
-        &node,
-        ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray),
-        "drive/pid_tuning_pub"  // Topic name
-    ));
-    pidTuningPubMsg.data.capacity = 8;  // 4 values for the left and right PID tuning (Kp, Ki, Kd, KiMax)
-    pidTuningPubMsg.data.size = 8;      // 8 values total (4 for left, 4 for right)
-    pidTuningPubMsg.data.data = (double*)malloc(8 * sizeof(double)); // Allocate memory for 8 values
 #endif
 
     const unsigned int timerTimeout = 100;
