@@ -155,8 +155,7 @@ public:
             digitalWrite(pin2, HIGH);
             analogWrite(pin3, abs(dutyCycle));
         } else {
-            digitalWrite(pin3, LOW);    //TODO was ist hier richtig damit der motor nicht hard stoppt, mal so probieren
-            //alogWrite(pin3, abs(dutyCycle));  //oder so
+            digitalWrite(pin3, LOW);
         }
     }
 
@@ -388,7 +387,7 @@ unsigned long lastLoopTime = 0; // Time of the last loop iteration
 
 // Function to calculate loop time statistics
 void collectLooptime() {
-    unsigned long currentTime = millis();
+    unsigned long currentTime = micros();
     unsigned long loopTime = currentTime - lastLoopTime;
     lastLoopTime = currentTime;
 
@@ -454,20 +453,12 @@ void timer_callback(rcl_timer_t* timer, int64_t last_call_time) {
         unsigned long minLoopTime = sortedLoopTimes[0];
         unsigned long maxLoopTime = sortedLoopTimes[LOOPTIME_WINDOW_SIZE - 1];
         unsigned long medianLoopTime = sortedLoopTimes[LOOPTIME_WINDOW_SIZE / 2];
-
-        unsigned long sumLoopTimes = 0;
-        for (int i = 0; i < LOOPTIME_WINDOW_SIZE; i++) {
-            sumLoopTimes += sortedLoopTimes[i];
-        }
-        unsigned long averageLoopTime = sumLoopTimes / LOOPTIME_WINDOW_SIZE;
-
         
         // Publish loop time statistics
         
         debugLooptimeMsg.data.data[0] = medianLoopTime;  // Median
-        debugLooptimeMsg.data.data[1] = minLoopTime;     // Min
+        debugLooptimeMsg.data.data[1] = minLoopTime;     // Minrclc_subscription_init_default
         debugLooptimeMsg.data.data[2] = maxLoopTime;     // Max
-        debugLooptimeMsg.data.data[3] = averageLoopTime; // Average
         RCSOFTCHECK(rcl_publish(&debugLooptimePublisher, &debugLooptimeMsg, NULL));
 #endif
 
@@ -509,15 +500,15 @@ void setup() {
     allocator = rcl_get_default_allocator();
     RCCHECK(rclc_support_init(&support, 0, NULL, &allocator));
     RCCHECK(rclc_node_init_default(&node, "diff_drive_bot_esp32", "", &support));
-    RCCHECK(rclc_subscription_init_default(&twistSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), "cmd_vel"));
-    RCCHECK(rclc_subscription_init_default(&pidTuningSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray), "drive/pid_tuning"));
+    RCCHECK(rclc_subscription_init_default(&twistSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), "cmd_vel"));  //TODO change to best effort?
+    RCCHECK(rclc_subscription_init_default(&pidTuningSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray), "drive/pid_tuning"));  //TODO change to parameter?
     pidTuningMsg.data.capacity = 4;  // 4 values for the left and right PID tuning (Kp, Ki, Kd, KiMax)
     pidTuningMsg.data.size = 4;      // 8 values total (4 for left, 4 for right)
     pidTuningMsg.data.data = (double*)malloc(4 * sizeof(double)); // Allocate memory for 8 values
 
 #ifdef DEBUG_DRIVE_LEFT
     // Initialize left debug publisher
-    RCCHECK(rclc_publisher_init_default(
+    RCCHECK(rclc_publisher_init_best_effort(
         &debugDriveLeftPublisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray),
@@ -530,7 +521,7 @@ void setup() {
 
 #ifdef DEBUG_DRIVE_RIGHT
     // Initialize right debug publisher
-    RCCHECK(rclc_publisher_init_default(
+    RCCHECK(rclc_publisher_init_best_effort(
         &debugDriveRightPublisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray),
@@ -543,19 +534,19 @@ void setup() {
 
 #ifdef DEBUG_LOOPTIME
     // Initialize loop time debug publisher
-    RCCHECK(rclc_publisher_init_default(
+    RCCHECK(rclc_publisher_init_best_effort(
         &debugLooptimePublisher,
         &node,
         ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray),
         "looptime_debug"
     ));
-    debugLooptimeMsg.data.capacity = 4;
-    debugLooptimeMsg.data.size = 4;
-    debugLooptimeMsg.data.data = (double*)malloc(4 * sizeof(double));
+    debugLooptimeMsg.data.capacity = 3;
+    debugLooptimeMsg.data.size = 3;
+    debugLooptimeMsg.data.data = (double*)malloc(3 * sizeof(double));
 #endif
 
-    const unsigned int timerTimeout = 100;
-    RCCHECK(rclc_timer_init_default2(&timer, &support, RCL_MS_TO_NS(timerTimeout), timer_callback, true));
+    const unsigned int timer_period_ms = 100;
+    RCCHECK(rclc_timer_init_default2(&timer, &support, RCL_MS_TO_NS(timer_period_ms), timer_callback, true));
     RCCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
     RCCHECK(rclc_executor_add_timer(&executor, &timer));
     RCCHECK(rclc_executor_add_subscription(&executor, &twistSubscriber, &twistMsg, &cmd_vel_callback, ON_NEW_DATA));
@@ -563,7 +554,7 @@ void setup() {
 }
 
 void loop() {
-    RCCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(100)));
+    RCCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(1000)));  //max time budget 1000 ms 
 
     robot.updateDrives();
 
