@@ -6,7 +6,7 @@ import pyapriltags as apriltag
 APRILTAG_SIZE = 0.150
 
 # Define object points for a single AprilTag
-object_points = np.array([
+april_tag_points = np.array([
     [-APRILTAG_SIZE / 2, -APRILTAG_SIZE / 2, 0],
     [APRILTAG_SIZE / 2, -APRILTAG_SIZE / 2, 0],
     [APRILTAG_SIZE / 2, APRILTAG_SIZE / 2, 0],
@@ -21,16 +21,21 @@ img_points = []  # Image 2D coordinates
 detector = apriltag.Detector(families="tagStandard41h12")
 
 # Capture images (or load from a directory)
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(2)
 
 print("Capturing calibration images. Press 'c' to capture, 'q' to finish.")
 
 image_count = 0
+resolution = None
 while True:
     ret, frame = cap.read()
     if not ret:
         print("Error: Could not capture frame.")
         break
+
+    if resolution is None:
+        resolution = frame.shape[0:2]
+        camera_frame_detections = np.zeros((int(resolution[0]), int(resolution[1]), 3), dtype=np.uint8)
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     detections = detector.detect(gray)
@@ -57,9 +62,12 @@ while True:
         for detection in detections:
             # Store detected image points
             img_points.append(detection.corners.astype(np.float32))
-            obj_points.append(object_points)
+            obj_points.append(april_tag_points)
+            for corner in detection.corners:
+                cv2.circle(camera_frame_detections, corner.astype(int), 5, (0, 255, 0), -1)
         image_count += 1
         print(f"Captured image {image_count}")
+        cv2.imshow("Camera Detections", camera_frame_detections)
     elif key == ord('q'):  # Quit capturing
         break
 
@@ -75,17 +83,57 @@ if len(obj_points) < 10:
     print("Error: Not enough images captured for calibration.")
     exit()
 
-# Perform camera calibration
-ret, camera_matrix, distortion_coeffs, rvecs, tvecs = cv2.calibrateCamera(
-    obj_points, img_points, gray.shape[::-1], None, None
-)
+# Save points as backup
+np.savez("calibration_points.npz",
+         image_count=image_count,
+         img_points=img_points,
+         obj_points=obj_points,
+         april_tag_points=april_tag_points)
+
+# Perform inital guess calibration
+# ret, camera_matrix, distortion_coeffs, rvecs, tvecs = cv2.calibrateCamera(
+#     obj_points, img_points, resolution[::-1], None, None
+# )
+
+camera_matrix = np.zeros((3, 3))
+distortion_coeffs = np.zeros((4, 1))
+rvecs = [np.zeros((1, 1, 3), dtype=np.float32) for i in range(len(obj_points))]
+tvecs = [np.zeros((1, 1, 3), dtype=np.float32) for i in range(len(obj_points))]
+ret, _, _, _, _ = cv2.fisheye.calibrate(
+    objectPoints=obj_points,
+    imagePoints=img_points,
+    image_size=resolution[::-1],
+    K=camera_matrix,
+    D=distortion_coeffs,
+    rvecs=rvecs,
+    tvecs=tvecs,
+    flags=cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW,
+    criteria=(cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6))
 
 # Display calibration results
 print("\nCamera Calibration Results:")
 print("Camera Matrix:\n", camera_matrix)
 print("Distortion Coefficients:\n", distortion_coeffs)
 
+# Calculate reprojection error
+mean_error = 0
+camera_frame_reprojection_error = np.zeros((resolution[0], resolution[1], 3), dtype=np.uint8)
+for i in range(len(obj_points)):
+    img_points2, _ = cv2.fisheye.projectPoints(obj_points[i], rvecs[i], tvecs[i], camera_matrix, distortion_coeffs)
+    error = cv2.norm(img_points[i], img_points2.squeeze(), cv2.NORM_L2) / len(img_points2)
+    for corner in img_points2:
+        cv2.circle(camera_frame_reprojection_error, corner.squeeze().astype(int), 1, (0, 255 * (1-error), 255 * error), -1)
+    mean_error += error
+print(f"Mean Error: {mean_error / len(obj_points)}")
+cv2.imshow("Camera Reprojection Error", camera_frame_reprojection_error)
+cv2.waitKey()
+
 # Save calibration results
-np.savez("camera_calibration_apriltag.npz", camera_matrix=camera_matrix, distortion_coeffs=distortion_coeffs)
+np.savez("camera_calibration_apriltag.npz",
+         resolution=resolution,
+         camera_matrix=camera_matrix,
+         distortion_coeffs=distortion_coeffs,
+         mean_error=mean_error)
 
 print("Calibration data saved as 'camera_calibration_apriltag.npz'.")
+cv2.destroyAllWindows()

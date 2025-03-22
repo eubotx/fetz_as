@@ -113,3 +113,6 @@ Thumbs.db
 #WSL2 mounted drives
 # Ignore .zone.identifier files
 *:Zone.Identifier
+
+# Test data files
+*.mp4
