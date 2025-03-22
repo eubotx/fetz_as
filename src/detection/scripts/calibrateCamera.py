@@ -21,16 +21,21 @@ img_points = []  # Image 2D coordinates
 detector = apriltag.Detector(families="tagStandard41h12")
 
 # Capture images (or load from a directory)
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(2)
 
 print("Capturing calibration images. Press 'c' to capture, 'q' to finish.")
 
 image_count = 0
+resolution = None
 while True:
     ret, frame = cap.read()
     if not ret:
         print("Error: Could not capture frame.")
         break
+
+    if resolution is None:
+        resolution = frame.shape
+        camera_frame_detections = np.zeros((int(resolution[0]), int(resolution[1]), 3), dtype=np.uint8)
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     detections = detector.detect(gray)
@@ -58,8 +63,11 @@ while True:
             # Store detected image points
             img_points.append(detection.corners.astype(np.float32))
             obj_points.append(object_points)
+            for corner in detection.corners:
+                cv2.circle(camera_frame_detections, corner.astype(int), 5, (0, 255, 0), -1)
         image_count += 1
         print(f"Captured image {image_count}")
+        cv2.imshow("Camera Detections", camera_frame_detections)
     elif key == ord('q'):  # Quit capturing
         break
 
@@ -85,7 +93,28 @@ print("\nCamera Calibration Results:")
 print("Camera Matrix:\n", camera_matrix)
 print("Distortion Coefficients:\n", distortion_coeffs)
 
+# Calculate reprojection error
+mean_error = 0
+camera_frame_reprojection_error = np.zeros((resolution[0], resolution[1], 3), dtype=np.uint8)
+for i in range(len(obj_points)):
+    img_points2, _ = cv2.projectPoints(obj_points[i], rvecs[i], tvecs[i], camera_matrix, distortion_coeffs)
+    error = cv2.norm(img_points[i], img_points2.squeeze(), cv2.NORM_L2) / len(img_points2)
+    # function to map 0 to green and 1 to red
+    def color_map(x):
+        return (0, 255 * (1-x), 255 * x)
+    for corner in img_points2:
+        cv2.circle(camera_frame_reprojection_error, corner.squeeze().astype(int), 1, color_map(error), -1)
+    mean_error += error
+print(f"Mean Error: {mean_error / len(obj_points)}")
+cv2.imshow("Camera Reprojection Error", camera_frame_reprojection_error)
+cv2.waitKey()
+
 # Save calibration results
-np.savez("camera_calibration_apriltag.npz", camera_matrix=camera_matrix, distortion_coeffs=distortion_coeffs)
+np.savez("camera_calibration_apriltag.npz",
+         resolution=resolution,
+         camera_matrix=camera_matrix,
+         distortion_coeffs=distortion_coeffs,
+         mean_error=mean_error)
 
 print("Calibration data saved as 'camera_calibration_apriltag.npz'.")
+cv2.destroyAllWindows()
