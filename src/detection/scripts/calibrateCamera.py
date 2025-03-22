@@ -6,7 +6,7 @@ import pyapriltags as apriltag
 APRILTAG_SIZE = 0.150
 
 # Define object points for a single AprilTag
-object_points = np.array([
+april_tag_points = np.array([
     [-APRILTAG_SIZE / 2, -APRILTAG_SIZE / 2, 0],
     [APRILTAG_SIZE / 2, -APRILTAG_SIZE / 2, 0],
     [APRILTAG_SIZE / 2, APRILTAG_SIZE / 2, 0],
@@ -34,7 +34,7 @@ while True:
         break
 
     if resolution is None:
-        resolution = frame.shape
+        resolution = frame.shape[0:2]
         camera_frame_detections = np.zeros((int(resolution[0]), int(resolution[1]), 3), dtype=np.uint8)
 
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -62,7 +62,7 @@ while True:
         for detection in detections:
             # Store detected image points
             img_points.append(detection.corners.astype(np.float32))
-            obj_points.append(object_points)
+            obj_points.append(april_tag_points)
             for corner in detection.corners:
                 cv2.circle(camera_frame_detections, corner.astype(int), 5, (0, 255, 0), -1)
         image_count += 1
@@ -83,10 +83,32 @@ if len(obj_points) < 10:
     print("Error: Not enough images captured for calibration.")
     exit()
 
-# Perform camera calibration
-ret, camera_matrix, distortion_coeffs, rvecs, tvecs = cv2.calibrateCamera(
-    obj_points, img_points, gray.shape[::-1], None, None
-)
+# Save points as backup
+np.savez("calibration_points.npz",
+         image_count=image_count,
+         img_points=img_points,
+         obj_points=obj_points,
+         april_tag_points=april_tag_points)
+
+# Perform inital guess calibration
+# ret, camera_matrix, distortion_coeffs, rvecs, tvecs = cv2.calibrateCamera(
+#     obj_points, img_points, resolution[::-1], None, None
+# )
+
+camera_matrix = np.zeros((3, 3))
+distortion_coeffs = np.zeros((4, 1))
+rvecs = [np.zeros((1, 1, 3), dtype=np.float32) for i in range(len(obj_points))]
+tvecs = [np.zeros((1, 1, 3), dtype=np.float32) for i in range(len(obj_points))]
+ret, _, _, _, _ = cv2.fisheye.calibrate(
+    objectPoints=obj_points,
+    imagePoints=img_points,
+    image_size=resolution[::-1],
+    K=camera_matrix,
+    D=distortion_coeffs,
+    rvecs=rvecs,
+    tvecs=tvecs,
+    flags=cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW,
+    criteria=(cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6))
 
 # Display calibration results
 print("\nCamera Calibration Results:")
@@ -97,13 +119,10 @@ print("Distortion Coefficients:\n", distortion_coeffs)
 mean_error = 0
 camera_frame_reprojection_error = np.zeros((resolution[0], resolution[1], 3), dtype=np.uint8)
 for i in range(len(obj_points)):
-    img_points2, _ = cv2.projectPoints(obj_points[i], rvecs[i], tvecs[i], camera_matrix, distortion_coeffs)
+    img_points2, _ = cv2.fisheye.projectPoints(obj_points[i], rvecs[i], tvecs[i], camera_matrix, distortion_coeffs)
     error = cv2.norm(img_points[i], img_points2.squeeze(), cv2.NORM_L2) / len(img_points2)
-    # function to map 0 to green and 1 to red
-    def color_map(x):
-        return (0, 255 * (1-x), 255 * x)
     for corner in img_points2:
-        cv2.circle(camera_frame_reprojection_error, corner.squeeze().astype(int), 1, color_map(error), -1)
+        cv2.circle(camera_frame_reprojection_error, corner.squeeze().astype(int), 1, (0, 255 * (1-error), 255 * error), -1)
     mean_error += error
 print(f"Mean Error: {mean_error / len(obj_points)}")
 cv2.imshow("Camera Reprojection Error", camera_frame_reprojection_error)
