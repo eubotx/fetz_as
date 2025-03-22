@@ -24,11 +24,12 @@ constexpr double MAX_MOTOR_SPEED = 65.0;  // Max speed in RPS
 constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 250;
 constexpr int ENCODER_TICKS_PER_REVOLUTION = 12 * 2;
 constexpr double GEARBOX_RATIO = 1.0/200.0;
+constexpr int MAX_WEAPON_MOTOR_DRIVER_DUTYCYCLE = 50;
 
 constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 2;  // In ms
 
 // PID controller parameters
-constexpr double KP = 10.0;
+constexpr double KP = 1.0;
 constexpr double KI = 0.5;
 constexpr double KD = 0.0;
 constexpr double KI_MAX = 30.0;
@@ -41,16 +42,24 @@ constexpr const char* MY_PASSWORD = "goodlife";
 constexpr int MY_PORT = 8888;
 
 // Pin definitions
-constexpr int LEFT_ENCODER_C1_PIN = 23;
-constexpr int LEFT_ENCODER_C2_PIN = 22;
-constexpr int RIGHT_ENCODER_C1_PIN = 19;
-constexpr int RIGHT_ENCODER_C2_PIN = 18;
-constexpr int MOTORDRIVER_IN1_PIN = 14;
-constexpr int MOTORDRIVER_IN2_PIN = 27;
-constexpr int MOTORDRIVER_IN3_PIN = 25;
-constexpr int MOTORDRIVER_IN4_PIN = 26;
-constexpr int MOTORDRIVER_ENA_PIN = 33;
-constexpr int MOTORDRIVER_ENB_PIN = 32;
+constexpr int LEFT_ENCODER_C1_PIN = 19;
+constexpr int LEFT_ENCODER_C2_PIN = 18;
+constexpr int RIGHT_ENCODER_C1_PIN = 35;
+constexpr int RIGHT_ENCODER_C2_PIN = 34;
+
+constexpr int MOTORDRIVER_LEFT_CW_PIN = 32;
+constexpr int MOTORDRIVER_LEFT_CCW_PIN = 16;
+constexpr int MOTORDRIVER_LEFT_PWM_PIN = 17;
+
+constexpr int MOTORDRIVER_RIGHT_CW_PIN = 25;
+constexpr int MOTORDRIVER_RIGHT_CCW_PIN = 26;
+constexpr int MOTORDRIVER_RIGHT_PWM_PIN = 27;
+
+constexpr int MOTORDRIVER_STBY_PIN = 33;
+
+constexpr int MOTORDRIVER_WEAPON_PIN = 23;
+
+// 4 Floating
 
 
 // ROS2 entities
@@ -72,8 +81,10 @@ std_msgs__msg__Float64MultiArray debugLooptimeMsg;
 
 rcl_subscription_t twistSubscriber;
 rcl_subscription_t pidTuningSubscriber;
+rcl_subscription_t weaponSpeedSubscriber;
 std_msgs__msg__Float64MultiArray pidTuningMsg;
 geometry_msgs__msg__Twist twistMsg;
+std_msgs__msg__Float64 weaponSpeedMsg;
 rclc_executor_t executor;
 rclc_support_t support;
 rcl_allocator_t allocator;
@@ -337,15 +348,46 @@ private:
     double gearboxRatio; // Gearbox ratio to convert wheel speed to motor speed
 };
 
+// Weapon class
+class Weapon {
+public:
+    Weapon(int pinPwm, int maxDutyCycle)
+    :pinPwm(pinPwm), maxDutyCycle(maxDutyCycle){};
+
+    void setWeaponSpeed(double weaponSpeed){
+      this->weaponSpeed = weaponSpeed;
+      motorControllerDutyCycle = int(round(weaponSpeed * maxDutyCycle));
+    }
+
+    void init(){
+      pinMode(pinPwm, OUTPUT);
+    }
+
+    void update(){
+      analogWrite(pinPwm, abs(motorControllerDutyCycle));
+    }
+
+    void stop() {
+      digitalWrite(pinPwm, LOW);
+    }
+
+private:
+  double weaponSpeed = 0.0;
+  int motorControllerDutyCycle = 0;
+  int maxDutyCycle;
+  int pinPwm;  
+};
+
 // RobotControl Class
 class RobotControl {
 public:
-    RobotControl(Wheel& leftWheel, Wheel& rightWheel, double wheelDiameter, double wheelDistance)
-        : leftWheel(leftWheel), rightWheel(rightWheel), wheelDiameter(wheelDiameter), wheelRadius(wheelDiameter/2.), wheelDistance(wheelDistance) {}
+    RobotControl(Wheel& leftWheel, Wheel& rightWheel, Weapon& weapon, double wheelDiameter, double wheelDistance)
+        : leftWheel(leftWheel), rightWheel(rightWheel), weapon(weapon), wheelDiameter(wheelDiameter), wheelRadius(wheelDiameter/2.), wheelDistance(wheelDistance) {}
 
     void init(){
       leftWheel.init();
       rightWheel.init();
+      weapon.init();
     }
     
     void calculateAndSetWheelSpeeds(double linear, double angular) {
@@ -368,9 +410,14 @@ public:
         rightWheel.update();
     }
 
+    void updateWeapon() {
+        weapon.update();
+    }
+
     private:
         Wheel& leftWheel;
         Wheel& rightWheel;
+        Weapon& weapon;
         const double wheelRadius;
         const double wheelDiameter;
         const double wheelDistance;
@@ -402,8 +449,8 @@ Encoder leftEncoder(LEFT_ENCODER_C1_PIN, LEFT_ENCODER_C2_PIN, ENCODER_TICKS_PER_
 Encoder rightEncoder(RIGHT_ENCODER_C1_PIN, RIGHT_ENCODER_C2_PIN, ENCODER_TICKS_PER_REVOLUTION);
 
 // Initialize motor controllers
-MotorDriver leftMotorDriver(MOTORDRIVER_IN1_PIN, MOTORDRIVER_IN2_PIN, MOTORDRIVER_ENB_PIN,  MAX_MOTOR_DRIVER_DUTYCYCLE);
-MotorDriver rightMotorDriver(MOTORDRIVER_IN3_PIN, MOTORDRIVER_IN4_PIN, MOTORDRIVER_ENA_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE);
+MotorDriver leftMotorDriver(MOTORDRIVER_LEFT_CW_PIN, MOTORDRIVER_LEFT_CCW_PIN, MOTORDRIVER_LEFT_PWM_PIN,  MAX_MOTOR_DRIVER_DUTYCYCLE);
+MotorDriver rightMotorDriver(MOTORDRIVER_RIGHT_CW_PIN, MOTORDRIVER_RIGHT_CCW_PIN, MOTORDRIVER_RIGHT_PWM_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE);
 
 // Initialize PID controllers
 PIDController leftPid(KP, KI, KD, KI_MAX);
@@ -417,8 +464,11 @@ PidMotor rightMotor(rightEncoder, rightMotorDriver, rightPid, UPDATE_INTERVAL_PI
 Wheel leftWheel(leftMotor, GEARBOX_RATIO);
 Wheel rightWheel(rightMotor, GEARBOX_RATIO);
 
+// Initialize Weapon
+Weapon weapon(MOTORDRIVER_WEAPON_PIN, MAX_WEAPON_MOTOR_DRIVER_DUTYCYCLE);
+
 // Initialize robot control
-RobotControl robot(leftWheel, rightWheel, WHEEL_DIAMETER, WHEEL_DISTANCE);
+RobotControl robot(leftWheel, rightWheel, weapon, WHEEL_DIAMETER, WHEEL_DISTANCE);
 
 
 // Timer callback
@@ -490,9 +540,22 @@ void pid_tuning_callback(const void* msgin) {
 }
 
 
+// PID tuning callback
+void weapon_speed_callback(const void* msgin) {
+    const std_msgs__msg__Float64* msg = (const std_msgs__msg__Float64*)msgin;
+
+    double weaponSpeed = msg->data;
+
+    // Update PID parameters for both left and right controllers
+    weapon.setWeaponSpeed(weaponSpeed);
+}
+
+
 void setup() {
     set_microros_wifi_transports((char*)MY_SSID, (char*)MY_PASSWORD, (char*)MY_IP, MY_PORT);
 
+    pinMode(MOTORDRIVER_STBY_PIN, OUTPUT);
+    digitalWrite(MOTORDRIVER_STBY_PIN, HIGH);
     robot.init();
 
     //Serial.begin(9600);
@@ -502,9 +565,11 @@ void setup() {
     RCCHECK(rclc_node_init_default(&node, "diff_drive_bot_esp32", "", &support));
     RCCHECK(rclc_subscription_init_default(&twistSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), "cmd_vel"));  //TODO change to best effort?
     RCCHECK(rclc_subscription_init_default(&pidTuningSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray), "drive/pid_tuning"));  //TODO change to parameter?
+    RCCHECK(rclc_subscription_init_default(&weaponSpeedSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64), "weapon/speed"));
     pidTuningMsg.data.capacity = 4;  // 4 values for the left and right PID tuning (Kp, Ki, Kd, KiMax)
     pidTuningMsg.data.size = 4;      // 8 values total (4 for left, 4 for right)
     pidTuningMsg.data.data = (double*)malloc(4 * sizeof(double)); // Allocate memory for 8 values
+    weaponSpeedMsg.data = 0.0;  // 1 value
 
 #ifdef DEBUG_DRIVE_LEFT
     // Initialize left debug publisher
@@ -551,12 +616,14 @@ void setup() {
     RCCHECK(rclc_executor_add_timer(&executor, &timer));
     RCCHECK(rclc_executor_add_subscription(&executor, &twistSubscriber, &twistMsg, &cmd_vel_callback, ON_NEW_DATA));
     RCCHECK(rclc_executor_add_subscription(&executor, &pidTuningSubscriber, &pidTuningMsg, &pid_tuning_callback, ON_NEW_DATA));
+    RCCHECK(rclc_executor_add_subscription(&executor, &weaponSpeedSubscriber, &weaponSpeedMsg, &weapon_speed_callback, ON_NEW_DATA));
 }
 
 void loop() {
     RCCHECK(rclc_executor_spin_some(&executor, RCL_MS_TO_NS(1000)));  //max time budget 1000 ms 
 
     robot.updateDrives();
+    robot.updateWeapon();
 
 #ifdef DEBUG_LOOPTIME
     // Get looptime data
