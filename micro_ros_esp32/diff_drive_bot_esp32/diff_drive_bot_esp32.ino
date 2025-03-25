@@ -23,10 +23,13 @@ constexpr double WHEEL_DISTANCE = 0.12;
 constexpr double MAX_MOTOR_SPEED = 65.0;  // Max speed in RPS
 constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 250;
 constexpr int ENCODER_TICKS_PER_REVOLUTION = 12 * 2;
+constexpr double ENCODER_PT1_TIMECONSTANT_S = 0.0;  //TODO
 constexpr double GEARBOX_RATIO = 1.0/200.0;
 constexpr int MAX_WEAPON_MOTOR_DRIVER_DUTYCYCLE = 50;
 
+constexpr unsigned long UPDATE_INTERVAL_ENCODER = 2;  // In ms
 constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 2;  // In ms
+
 
 // PID controller parameters
 constexpr double KP = 1.0;
@@ -42,10 +45,10 @@ constexpr const char* MY_PASSWORD = "goodlife";
 constexpr int MY_PORT = 8888;
 
 // Pin definitions
-constexpr int LEFT_ENCODER_C1_PIN = 19;
-constexpr int LEFT_ENCODER_C2_PIN = 18;
-constexpr int RIGHT_ENCODER_C1_PIN = 35;
-constexpr int RIGHT_ENCODER_C2_PIN = 34;
+constexpr int LEFT_ENCODER_C2_PIN = 19;
+constexpr int LEFT_ENCODER_C1_PIN = 21; //ZU 18 UMLÖTEN
+constexpr int RIGHT_ENCODER_C1_PIN = 34;
+constexpr int RIGHT_ENCODER_C2_PIN = 35;
 
 constexpr int MOTORDRIVER_LEFT_CW_PIN = 32;
 constexpr int MOTORDRIVER_LEFT_CCW_PIN = 16;
@@ -98,7 +101,8 @@ rcl_timer_t timer;
 // Encoder class
 class Encoder {
 public:
-    Encoder(int pin1, int pin2, double ticksPerRevolution) : pin1(pin1), pin2(pin2), ticksPerRevolution(ticksPerRevolution) {}
+    Encoder(int pin1, int pin2, int ticksPerRevolution, float timeConstant, unsigned long updateInterval)
+        : pin1(pin1), pin2(pin2), ticksPerRevolution(ticksPerRevolution), timeConstant(timeConstant), updateInterval(updateInterval*1000) {}
     
     void init() {
         pinMode(pin1, INPUT_PULLUP);
@@ -109,40 +113,69 @@ public:
 
         encoder.attachHalfQuad(pin1, pin2);
         encoder.setCount(0);
+        
+        lastUpdateTime = micros();
     }
 
     void update() {
-        long currentCount = encoder.getCount();
-        long currentTime = micros();
+        unsigned long currentTime = micros();
+
+        unsigned long deltaTime = currentTime - lastUpdateTime;
         
-        long deltaCount = currentCount - lastCount;
-        unsigned long deltaTime = currentTime - lastTime;
-        rps = (deltaCount / (double)ticksPerRevolution) / (deltaTime / 1000000.0);
-        
-        lastCount = currentCount;
-        lastTime = currentTime;
-        
+        if (updateInterval == 0 || deltaTime >= updateInterval) {
+            
+            long currentCount = encoder.getCount();
+            
+            // Calculate raw speed
+            
+            if (deltaTime > 0) {  // Prevent division by zero
+                double rawRps = (currentCount - lastCount) / (ticksPerRevolution * (deltaTime / 1000000.0));
+                
+                // Apply PT1 filter if time constant is positive
+                if (timeConstant > 0.0) {
+                    double alpha = deltaTime / (timeConstant * 1000000.0 + deltaTime);
+                    filteredRps = alpha * rawRps + (1.0 - alpha) * filteredRps;
+                } else {
+                    // No filtering if time constant is zero or negative
+                    filteredRps = rawRps;
+                }
+            }
+            
+            lastCount = currentCount;
+            lastUpdateTime = currentTime;
+        }
     }
 
     void resetCount() {
         encoder.setCount(0);
+        lastCount = 0;
     }
 
     double getSpeed() const {
-        return rps;
+        return filteredRps;
     }
 
-    double getAngularPosition(){
-        return ((double)lastCount) / ticksPerRevolution;
+    double getAngularPosition() const {
+        return (lastCount / (double)ticksPerRevolution);
+    }
+
+    void setTimeConstant(float tc) {
+        timeConstant = tc;
+    }
+
+    void setUpdateInterval(unsigned long interval) {
+        updateInterval = interval * 1000;
     }
 
 private:
     ESP32Encoder encoder;
     int pin1, pin2;
-    double ticksPerRevolution;
+    int ticksPerRevolution;
     long lastCount = 0;
-    unsigned long lastTime = 0;
-    double rps = 0;
+    unsigned long lastUpdateTime = 0;
+    unsigned long updateInterval;
+    double filteredRps = 0.0;
+    double timeConstant;
 };
 
 // MotorDriver class
@@ -260,12 +293,13 @@ public:
     }
     
     void update() {
+        
+        encoder.update(); //TODO das besser organisieren außerhalb der Klasse
+        
         unsigned long currentTime = millis();
         if (currentTime - lastUpdateTime >= controllCycleTime) {
 
             lastUpdateTime = currentTime;
-
-            encoder.update();
 
             if (desiredMotorSpeed == 0.0){
               motorTimeoutThresh ++;
@@ -445,8 +479,8 @@ void collectLooptime() {
 #endif
 
 // Initialize encoders
-Encoder leftEncoder(LEFT_ENCODER_C1_PIN, LEFT_ENCODER_C2_PIN, ENCODER_TICKS_PER_REVOLUTION);
-Encoder rightEncoder(RIGHT_ENCODER_C1_PIN, RIGHT_ENCODER_C2_PIN, ENCODER_TICKS_PER_REVOLUTION);
+Encoder leftEncoder(LEFT_ENCODER_C1_PIN, LEFT_ENCODER_C2_PIN, ENCODER_TICKS_PER_REVOLUTION, ENCODER_PT1_TIMECONSTANT_S, UPDATE_INTERVAL_ENCODER);
+Encoder rightEncoder(RIGHT_ENCODER_C1_PIN, RIGHT_ENCODER_C2_PIN, ENCODER_TICKS_PER_REVOLUTION,ENCODER_PT1_TIMECONSTANT_S, UPDATE_INTERVAL_ENCODER);
 
 // Initialize motor controllers
 MotorDriver leftMotorDriver(MOTORDRIVER_LEFT_CW_PIN, MOTORDRIVER_LEFT_CCW_PIN, MOTORDRIVER_LEFT_PWM_PIN,  MAX_MOTOR_DRIVER_DUTYCYCLE);
