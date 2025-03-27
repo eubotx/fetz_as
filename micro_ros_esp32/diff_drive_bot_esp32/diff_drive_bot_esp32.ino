@@ -32,7 +32,7 @@ constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 2;  // In ms
 
 
 // PID controller parameters
-constexpr double KP = 1.0;
+constexpr double KP = 2.0;
 constexpr double KI = 0.5;
 constexpr double KD = 0.0;
 constexpr double KI_MAX = 30.0;
@@ -45,10 +45,10 @@ constexpr const char* MY_PASSWORD = "goodlife";
 constexpr int MY_PORT = 8888;
 
 // Pin definitions
-constexpr int LEFT_ENCODER_C2_PIN = 19;
-constexpr int LEFT_ENCODER_C1_PIN = 21; //ZU 18 UMLÖTEN
-constexpr int RIGHT_ENCODER_C1_PIN = 34;
-constexpr int RIGHT_ENCODER_C2_PIN = 35;
+constexpr int LEFT_ENCODER_C2_PIN = 18;
+constexpr int LEFT_ENCODER_C1_PIN = 19;
+constexpr int RIGHT_ENCODER_C1_PIN = 5;
+constexpr int RIGHT_ENCODER_C2_PIN = 4;
 
 constexpr int MOTORDRIVER_LEFT_CW_PIN = 32;
 constexpr int MOTORDRIVER_LEFT_CCW_PIN = 16;
