@@ -39,9 +39,12 @@ constexpr double KI_MAX = 30.0;
 
 // WiFi configuration
 //constexpr const char* MY_IP = "192.168.8.171"; // Bjoern Gelb DO NOT DELETE
-constexpr const char* MY_IP = "192.168.8.204"; // Flo Gelb
-constexpr const char* MY_SSID = "GL-MT300N-V2-7d8";
-constexpr const char* MY_PASSWORD = "goodlife";
+constexpr const char* MY_IP = "192.168.1.100";
+constexpr const char* MY_SSID = "TMOBILE-10061";
+constexpr const char* MY_PASSWORD = "TMAF086FB4";
+//constexpr const char* MY_IP = "192.168.8.204"; // Flo Gelb
+//constexpr const char* MY_SSID = "GL-MT300N-V2-7d8";
+//constexpr const char* MY_PASSWORD = "goodlife";
 constexpr int MY_PORT = 8888;
 
 // Pin definitions
