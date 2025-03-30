@@ -1,10 +1,11 @@
 import numpy as np
 from PIL import Image
+from bitstring import options
+
 
 class ImageFileSource:
-    def __init__(self, image_file_path=None):
-        if image_file_path is None:
-            image_file_path = "/home/tiago/repos/robofetz_2025/data/live-2024-05m26s.png"
+    def __init__(self, options):
+        image_file_path = options['frame_path']
 
         self.image = Image.open(image_file_path)
         if self.image is None:

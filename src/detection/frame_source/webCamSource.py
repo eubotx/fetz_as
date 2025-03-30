@@ -1,30 +1,28 @@
 import cv2
 import numpy as np
 
+from src.detection.frame_source.imageRectification import ImageRectification
+
 class WebCamSource:
-    def __init__(self):
-        self.cap = cv2.VideoCapture(2)
+    def __init__(self, webcam_id=0,
+                 save_stream_path='/home/tiago/repos/fetz_as/src/detection/data/testSeqxxx.mp4'):
+        # Open webcam
+        self.cap = cv2.VideoCapture(webcam_id)
         if not self.cap.isOpened():
             raise Exception("Error: Could not open webcam.")
 
-        # import camera calibration data
-        self.calibration_data = None
-        with np.load('data/USBGS720P02-L170_calibration.npz') as data:
-            for k, v in data.items():
-                print(f"{k}: {v}")
-            self.calibration_data = data
+        # Create rectification LUT
+        self.rectification = ImageRectification()
 
-            self.map1, self.map2 = cv2.fisheye.initUndistortRectifyMap(
-                self.calibration_data['camera_matrix'],
-                self.calibration_data['distortion_coeffs'],
-                np.eye(3),
-                self.calibration_data['camera_matrix'],
-                self.calibration_data['resolution'].squeeze()[0:2],
-                cv2.CV_16SC2)
-
-        # Define the codec and create VideoWriter object
-        fourcc = cv2.VideoWriter_fourcc(*'MP4V')
-        self.out = cv2.VideoWriter('/home/tiago/repos/fetz_as/src/detection/data/testSeqxxx.mp4', fourcc, 30.0, (640, 480))
+        # Optionally save webcam stream to file
+        if save_stream_path is None:
+            self.out = None
+        else:
+            fourcc = cv2.VideoWriter_fourcc(*'MP4V')
+            self.out = cv2.VideoWriter(filename=save_stream_path,
+                                       fourcc=fourcc,
+                                       fps=self.cap.get(cv2.CAP_PROP_FPS),
+                                       frameSize=np.array([self.cap.get(cv2.CAP_PROP_FRAME_WIDTH), self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)]).astype(int))
 
     def get_frame(self):
         ret, frame = self.cap.read()
@@ -32,12 +30,10 @@ class WebCamSource:
             print("Error: Could not read frame.")
             return None
 
-        # Undistort image
-        frame = cv2.remap(frame, self.map1, self.map2,
-                          interpolation=cv2.INTER_LINEAR,
-                          borderMode=cv2.BORDER_CONSTANT)
+        if self.out is not None:
+            self.out.write(frame)
 
-        self.out.write(frame)
+        frame = self.rectification.rectify(frame)
 
         # camera_properties = {
         #     'width': cv2.CAP_PROP_FRAME_WIDTH,
@@ -61,4 +57,5 @@ class WebCamSource:
 
     def __del__(self):
         self.cap.release()
-        self.out.release()
+        if self.out is not None:
+            self.out.release()

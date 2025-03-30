@@ -9,11 +9,15 @@ import frame_source
 # plt.switch_backend('macosx')
 
 if __name__ == '__main__':
-    # frame_source = frame_source.VideoFileSource()
-    frame_source = frame_source.WebCamSource()
+    options = {
+        'frame_path': '/home/tiago/repos/fetz_as/src/detection/data/testSeq4.mp4',
+        'camera_calibration_path': '/home/tiago/repos/fetz_as/src/detection/calibration/camera_calibration.json'
+    }
+
+    frame_source = frame_source.GenericSource(frame_source.SourceType.Video, options=options)
 
     diff_detector = detector.DiffDetector()
-    april_tag_detector = detector.AprilTagDetector()
+    april_tag_detector = detector.AprilTagDetector(options)
     while True:
         frame = frame_source.get_frame()
         if frame is None:
