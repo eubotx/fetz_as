@@ -1,10 +1,11 @@
-#ROS2 and Gazebo Harmonic launch file for differential drive robot
+#ROS2 and Gazebo Harmonic launch file for differential drive robots
 
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import IncludeLaunchDescription
 from launch.launch_description_sources import PythonLaunchDescriptionSource
+import math
 
 from launch_ros.actions import Node
 import xacro
@@ -12,92 +13,100 @@ import xacro
 
 def generate_launch_description():
     
-    robot_xacro_name='differential_drive_robot'   # needs to match robot name in Xacro file
-    name_package = 'simple_diff_drive_sim' #name for package and paths
-    model_file_relative_path='model/robot.xacro'   #relative path of robot.xacro
-    world_file_relative_path='worlds/arena.world'
+    # Package and file paths
+    pkg_name = 'simple_diff_drive_sim'
+    world_file = os.path.join(get_package_share_directory(pkg_name), 'worlds/arena.world')
 
-    path_model_file = os.path.join(get_package_share_directory(name_package), model_file_relative_path)   # absolute path model
-    robot_description = xacro.process_file(path_model_file).toxml() # combines robot.xacro and robot.gazebo to xml to complete robot description
-    path_world_file = os.path.join(get_package_share_directory(name_package), world_file_relative_path)  # absolute path to world  #uncomment for empty world
+    # Robot (Main)
+    robot_name = 'robot'
+    robot_xacro = os.path.join(get_package_share_directory(pkg_name), 'model/robot.xacro')
+    robot_description = xacro.process_file(robot_xacro).toxml()
+    robot_pose = ['0.3', '0.3', '0.0', '0.0', '0.0', '0.0']  # x,y,z,R,P,Y
 
-    # launch file from the gazebo_ros package itself
-    gazebo_ros_package_launch = PythonLaunchDescriptionSource(os.path.join(get_package_share_directory('ros_gz_sim'),
-                                                                           'launch', 'gz_sim.launch.py'))
-    
-    #gazebo_launch=IncludeLaunchDescription(gazebo_ros_package_launch, launch_arguments={'gz_args': ['-r -v -v4', path_world_file], 'on_exit_shutdown': 'true'}.items())
+    # Enemy Robot
+    enemy_name = 'enemy'
+    enemy_xacro = os.path.join(get_package_share_directory(pkg_name), 'model/enemy.xacro')
+    enemy_description = xacro.process_file(enemy_xacro).toxml()
+    enemy_pose = ['1.2', '1.2', '0.0', '0.0', '0.0', '3.14']
 
-    # uncomment this if for your using own world model
-    gazebo_launch = IncludeLaunchDescription(
-        gazebo_ros_package_launch,
+    # Gazebo launch
+    gazebo = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(
+            get_package_share_directory('ros_gz_sim'), 'launch', 'gz_sim.launch.py'
+        )),
         launch_arguments={
-            'gz_args': f'-r -v4 {path_world_file}',
+            'gz_args': f'-r -v4 {world_file}',
             'on_exit_shutdown': 'true'
         }.items()
     )
 
-    # spawn the model node in Gazebo
-    spawn_model_node_gazebo = Node(
-        package='ros_gz_sim',
-        executable='create',
-        arguments=[
-            '-name', robot_xacro_name,
-            '-topic', 'robot_description'
-        ],
-        output='screen',
-    )
-
-    # robot state publisher node
-    robot_state_publisher_node = Node(
+    # Robot State Publishers (with namespaces)
+    robot_state_pub = Node(
         package='robot_state_publisher',
         executable='robot_state_publisher',
-        output='screen',
-        parameters=[
-            {'robot_description': robot_description},
-            #{'use_sim_time': LaunchConfiguration('use_sim_time')}
-            {'use_sim_time': True}
-        ]
-    )
-
-    # bridge gazebo and ros topics to enable control
-    bridge_params = os.path.join(
-        get_package_share_directory(name_package),
-        'parameters',
-        'bridge_parameters.yaml'
-    )
-
-    start_gazebo_ros_bridge_cmd = Node(
-        package='ros_gz_bridge',
-        executable='parameter_bridge',
-        arguments=[
-            '--ros-args',
-            '-p',
-            f'config_file:={bridge_params}',
-        ],
+        #namespace=robot_name,  # Namespace to avoid topic conflicts
+        parameters=[{'robot_description': robot_description, 'use_sim_time': True}],
         output='screen'
     )
 
-    arena_tf = Node(
-        package='tf2_ros',
-        executable='static_transform_publisher',
-        name='static_transform_publisher_arena_odom',
-        arguments=['0.6', '-0.6', '0', '0', '0', '0', 'arena', 'odom']
+    enemy_state_pub = Node(
+        package='robot_state_publisher',
+        executable='robot_state_publisher',
+        namespace=enemy_name,  # Namespace to avoid topic conflicts
+        parameters=[{'robot_description': enemy_description, 'use_sim_time': True}],
+        output='screen'
     )
 
-    """ ground_truth = Node(
-        package='simple_diff_drive_sim',
-        executable='ground_truth_pose_publisher',
+    # Spawn Robot (Main)
+    spawn_robot = Node(
+        package='ros_gz_sim',
+        executable='create',
+        arguments=[
+            '-name', robot_name,
+            '-topic', '/robot_description',  # Namespaced topic
+            '-x', robot_pose[0],
+            '-y', robot_pose[1],
+            '-z', robot_pose[2],
+            '-R', robot_pose[3],
+            '-P', robot_pose[4],
+            '-Y', robot_pose[5]
+        ],
         output='screen',
-    ) """
+    )
 
-    launch_description_object = LaunchDescription() # create empty launch description
-    launch_description_object.add_action(gazebo_launch)
-    launch_description_object.add_action(spawn_model_node_gazebo)
-    launch_description_object.add_action(robot_state_publisher_node)
-    launch_description_object.add_action(start_gazebo_ros_bridge_cmd)
-    launch_description_object.add_action(arena_tf)
-    #launch_description_object.add_action(ground_truth)
+    # Spawn Enemy Robot
+    spawn_enemy = Node(
+        package='ros_gz_sim',
+        executable='create',
+        arguments=[
+            '-name', enemy_name,
+            '-topic', f'/{enemy_name}/robot_description',  # Namespaced topic
+            '-x', enemy_pose[0],
+            '-y', enemy_pose[1],
+            '-z', enemy_pose[2],
+            '-R', enemy_pose[3],
+            '-P', enemy_pose[4],
+            '-Y', enemy_pose[5]
+        ],
+        output='screen',
+    )
+
+    # Bridge (configured for both robots)
+    bridge_params = os.path.join(get_package_share_directory(pkg_name), 'parameters/bridge_parameters.yaml')
+    bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=['--ros-args', '-p', f'config_file:={bridge_params}'],
+        output='screen'
+    )
 
 
-
-    return launch_description_object
+    # Build launch description
+    ld = LaunchDescription()
+    ld.add_action(gazebo)
+    ld.add_action(robot_state_pub)
+    ld.add_action(enemy_state_pub)
+    ld.add_action(spawn_robot)
+    ld.add_action(spawn_enemy)
+    ld.add_action(bridge)
+    return ld
