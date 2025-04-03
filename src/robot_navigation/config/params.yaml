@@ -1,0 +1,8 @@
+simple_navigator:
+  ros__parameters:
+    linear_kp: 0.5
+    angular_kp: 1.0
+    max_linear: 0.2
+    max_angular: 1.0
+    position_tolerance: 0.05
+    orientation_tolerance: 0.1
