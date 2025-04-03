@@ -5,14 +5,14 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     config = os.path.join(
-        get_package_share_directory('my_robot_navigation'),
+        get_package_share_directory('robot_navigation'),
         'config',
         'params.yaml'
     )
     
     return LaunchDescription([
         Node(
-            package='my_robot_navigation',
+            package='robot_navigation',
             executable='simple_navigator',
             name='simple_navigator',
             output='screen',

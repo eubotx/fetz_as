@@ -15,7 +15,7 @@ setup(
     ],
     install_requires=['setuptools'],
     zip_safe=True,
-    mmaintainer='eubotx',
+    maintainer='eubotx',
     maintainer_email='eubotx@mailbox.org',
     description='Custom navigation package',
     license='GNU GPL',
