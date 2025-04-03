@@ -8,16 +8,31 @@ class TFToPoseStamped(Node):
     def __init__(self):
         super().__init__('tf_to_pose_stamped')
         
+        # Declare parameters without default values
+        self.declare_parameter('tf_topic')
+        self.declare_parameter('pose_topic')
+        
+        # Get parameter values - these will raise if parameters aren't set
+        try:
+            tf_topic = self.get_parameter('tf_topic').get_parameter_value().string_value
+            pose_topic = self.get_parameter('pose_topic').get_parameter_value().string_value
+        except Exception as e:
+            self.get_logger().error("Required parameters not set! You must provide both 'tf_topic' and 'pose_topic' parameters.")
+            raise
+        
         self.sub = self.create_subscription(
             TFMessage,
-            '/camera/robot_pose_tf',
+            tf_topic,
             self.tf_callback,
             10)
             
         self.pub = self.create_publisher(
             PoseStamped,
-            '/camera/robot_pose',
+            pose_topic,
             10)
+        
+        self.get_logger().info(f"Listening to TF messages on '{tf_topic}'")
+        self.get_logger().info(f"Publishing PoseStamped messages on '{pose_topic}'")
     
     def tf_callback(self, msg):
         if not msg.transforms:
@@ -37,10 +52,15 @@ class TFToPoseStamped(Node):
 
 def main(args=None):
     rclpy.init(args=args)
-    node = TFToPoseStamped()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        node = TFToPoseStamped()
+        rclpy.spin(node)
+    except Exception as e:
+        print(f"Error: {e}")
+    finally:
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 if __name__ == '__main__':
     main()

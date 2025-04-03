@@ -47,13 +47,13 @@ class SimpleNavigator(Node):
         # Subscribers
         self.pose_sub = self.create_subscription(
             PoseStamped, 
-            '/camera/robot_pose', 
+            '/camera/pose', 
             self.pose_callback, 
             10)
             
         self.goal_sub = self.create_subscription(
             PoseStamped, 
-            '/goal_pose', 
+            'camera/enemy/pose', 
             self.goal_callback, 
             10)
             
