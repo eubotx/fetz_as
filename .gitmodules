@@ -4,3 +4,6 @@
 [submodule "src/micro_ros_msgs"]
 	path = src/micro_ros_msgs
 	url = https://github.com/micro-ROS/micro_ros_msgs.git
+[submodule "src/detection/calibration/fisheye-camera-undistortion"]
+	path = src/detection/calibration/fisheye-camera-undistortion
+	url = https://github.com/eubotx/fisheye-camera-undistortion.git
