@@ -2,11 +2,9 @@ import cv2
 import numpy as np
 import pyapriltags as apriltag  # Documentation: https://github.com/WillB97/pyapriltags
 
-from src.detection.calibration.calibration import Calibration
-
 class AprilTagDetector:
-    def __init__(self, calibration_data):
-        camera_matrix = calibration_data['camera_matrix']
+    def __init__(self, calibration):
+        camera_matrix = calibration.get()['camera_matrix']
         fx = camera_matrix[0, 0]
         fy = camera_matrix[1, 1]
         cx = camera_matrix[0, 2]

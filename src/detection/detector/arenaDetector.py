@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.spatial import ConvexHull
 
-class ArenaSelector:
+class ArenaDetector:
     def __init__(self, img):
         self.img = img
         self.fig, self.axes = plt.subplots(figsize=(8, 8))
