@@ -9,6 +9,8 @@ import math
 
 from launch_ros.actions import Node
 import xacro
+from launch.substitutions import PathJoinSubstitution
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
@@ -100,6 +102,27 @@ def generate_launch_description():
         output='screen'
     )
 
+    # My robot tf to pose instance
+    robot_tf_to_pose = Node(
+        package='simple_diff_drive_sim',
+        executable='tf_to_pose',
+        name='tf_to_pose_robot',  # Unique name
+        parameters=[
+            {'tf_topic': '/sim/pose_tf'},
+            {'pose_topic': '/camera/pose'}
+        ]
+    )
+    
+    ## Enemy robot tf to pose instance
+    enemy_tf_to_pose = Node(
+        package='simple_diff_drive_sim',
+        executable='tf_to_pose',
+        name='tf_to_pose_enemy',  # Unique name
+        parameters=[
+            {'tf_topic': '/sim/enemy/pose_tf'},
+            {'pose_topic': '/camera/enemy/pose'}
+        ]
+    )
 
     # Build launch description
     ld = LaunchDescription()
@@ -109,4 +132,7 @@ def generate_launch_description():
     ld.add_action(spawn_robot)
     ld.add_action(spawn_enemy)
     ld.add_action(bridge)
+    ld.add_action(robot_tf_to_pose)
+    ld.add_action(enemy_tf_to_pose)
+
     return ld

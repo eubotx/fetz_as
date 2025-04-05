@@ -1,0 +1,19 @@
+teleop_twist_joy:
+  # Joystick device file
+  joy_dev: /dev/input/js0
+
+  # Linear and Angular velocity scaling
+  axis_linear: 1        # Axis for forward/backward (e.g., left joystick Y-axis)
+  axis_angular: 0       # Axis for turning (e.g., left joystick X-axis)
+
+  # Button mappings
+  button_forward: 4     # Button to move forward (e.g., 'A' button)
+  button_backward: 5    # Button to move backward (e.g., 'B' button)
+  button_left: 2        # Button to turn left (e.g., 'X' button)
+  button_right: 3       # Button to turn right (e.g., 'Y' button)
+
+  # Button for enabling robot (press to start driving)
+  button_enable: 6      # (e.g., 'LB' or 'RB')
+  
+  # Deadzone for the joystick axes to avoid drifting
+  deadzone: 0.1

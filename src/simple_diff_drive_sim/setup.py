@@ -40,6 +40,7 @@ setup(
 
     entry_points={
         'console_scripts': [
+            'tf_to_pose = simple_diff_drive_sim.tf_to_pose:main',  # <-- Your node
         ],
     },
 )
