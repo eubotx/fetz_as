@@ -1,3 +1,4 @@
+import cv2.fisheye
 import numpy as np
 import json
 import os
@@ -16,9 +17,29 @@ class Calibration:
                 raise Exception(f"Unknown filetype: {ext} for file: {calibration_path}")
         else:
             self.load_default_calibration()
+        self.print_calibration()
 
     def get(self):
         return self.calib
+
+    def change_to_rectified_image(self, calibration_data):
+        self.calib_original = self.calib.copy()
+        self.calib = calibration_data
+
+    def project(self, pt3d):
+        if self.calib['useFisheyeModel'] and False:
+            pt2d, _ = cv2.fisheye.projectPoints(objectPoints=pt3d,
+                                                rvec=np.eye(3),
+                                                tvec=np.zeros(3),
+                                                  K=self.calib['camera_matrix'],
+                                                  D=self.calib['distortion_coeffs'],)
+        else:
+            pt2d, _ = cv2.projectPoints(objectPoints=pt3d,
+                                        rvec=np.eye(3),
+                                        tvec=np.zeros(3),
+                                        cameraMatrix=self.calib['camera_matrix'],
+                                        distCoeffs=self.calib['distortion_coeffs'],)
+        return pt2d
 
     def print_calibration(self):
         for k, v in self.calib.items():
@@ -44,7 +65,6 @@ class Calibration:
 
     def load_npz(self, npz_file):
         self.calib = np.load(npz_file)
-        self.print_calibration()
 
     def load_json(self, json_file):
         # Load JSON file
@@ -52,13 +72,12 @@ class Calibration:
             json_data = json.load(f)
 
         self.calib = {key: np.array(value) for key, value in json_data.items()}
-        self.print_calibration()
 
     def load_default_calibration(self):
         # Default calibration data
         self.calib = {
-            'camera_matrix': np.array([[1.0, 0, 0],
-                                       [0, 1.0, 0],
+            'camera_matrix': np.array([[1.0, 0, 0.5],
+                                       [0, 1.0, 0.5],
                                        [0, 0, 1.0]]),
             'distortion_coeffs': np.zeros((5,)),
             'resolution': np.array([480, 640]),
@@ -66,7 +85,6 @@ class Calibration:
             'mean_error': -1.0,
             'max_error': -1.0,
         }
-        self.print_calibration()
 
     def convert_npz_to_json(self, npz_filepath):
         # Load the NPZ file

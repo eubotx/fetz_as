@@ -128,15 +128,11 @@ def compute_calibration(resolution, img_points, obj_points):
             flags=cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC+cv2.fisheye.CALIB_CHECK_COND+cv2.fisheye.CALIB_FIX_SKEW,
             criteria=(cv2.TERM_CRITERIA_EPS+cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6))
 
-    # Display calibration results
-    print("\nCamera Calibration Results:")
-    print("Camera Matrix:\n", camera_matrix)
-    print("Distortion Coefficients:\n", distortion_coeffs)
-
     # Calculate reprojection error
     mean_error = 0
     max_error = 0
     camera_frame_reprojection_error = np.zeros((resolution[0], resolution[1], 3), dtype=np.uint8)
+    max_corner = np.zeros(2)
     for i in range(len(obj_points)):
         if not useFisheyeModel:
             img_points2, _ = cv2.projectPoints(obj_points[i], rvecs[i], tvecs[i], camera_matrix, distortion_coeffs)
@@ -144,15 +140,15 @@ def compute_calibration(resolution, img_points, obj_points):
             img_points2, _ = cv2.fisheye.projectPoints(obj_points[i], rvecs[i], tvecs[i], camera_matrix, distortion_coeffs)
         error = cv2.norm(img_points[i], img_points2.squeeze(), cv2.NORM_L2) / len(img_points2)
         for corner in img_points2:
+            max_corner = np.max([corner.squeeze(), max_corner], axis=0)
             cv2.circle(camera_frame_reprojection_error, corner.squeeze().astype(int), 1, (0, 255 * (1-error), 255 * error), -1)
             cv2.putText(camera_frame_reprojection_error, f"{error:.2f}", corner.squeeze().astype(int),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.25, (0, 255 * (1-error), 255 * error), 1)
         mean_error += error
         max_error = max(max_error, error)
     mean_error /= len(obj_points)
+    print(f"Reprojection error draw - max corner: {max_corner}")
     print(f"Mean Error: {mean_error}, Max Error: {max_error}")
-    cv2.imshow("Camera Reprojection Error", camera_frame_reprojection_error)
-    cv2.waitKey()
 
     # Save calibration results
     calibration_result = {
@@ -163,10 +159,16 @@ def compute_calibration(resolution, img_points, obj_points):
         "mean_error": mean_error,
         "max_error": max_error,
     }
+    print("Calibration results:")
+    for k, v in calibration_result.items():
+        print(f"{k}: {v}")
     json_object = json.dumps(calibration_result, indent=4)
     with open("camera_calibration.json", "w") as outfile:
         outfile.write(json_object)
         print("Calibration data saved as 'camera_calibration.json'.")
+
+    cv2.imshow("Camera Reprojection Error", camera_frame_reprojection_error)
+    cv2.waitKey()
     cv2.destroyAllWindows()
 
 resolution = None
@@ -190,7 +192,7 @@ else:
 
     for i in range(len(obj_points)):
         obj_points[i] = april_tag_points
-    print(obj_points)
+    # print(obj_points)
 
     max_corner = np.zeros(2)
     for i, detection in enumerate(img_points):

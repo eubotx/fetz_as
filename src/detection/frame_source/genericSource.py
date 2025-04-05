@@ -23,10 +23,10 @@ class GenericSource:
         else:
             raise Exception(f"Unknown source_type: {source_type}")
 
-        self.calibration_data = Calibration(options).get()
+        self.calibration = Calibration(options)
         if 'camera_calibration_path' in options.keys():
-            self.rectification = ImageRectification(self.calibration_data)
-            self.calibration_data = self.rectification.get_rectified_calibration()
+            self.rectification = ImageRectification(self.calibration.get())
+            self.calibration.change_to_rectified_image(self.rectification.get_rectified_calibration())
         else:
             self.rectification = None
 
@@ -47,7 +47,7 @@ class GenericSource:
         print(f"Frame size: {frame.shape}")
         if self.rectification is not None:
             frame = self.rectification.rectify(frame)
-            print(f"Rectified frame size: {frame.shape}")
+            print(f"Rectified image size: {frame.shape}")
 
         if 'downscale' in self.options.keys():
             height, width, _ = frame.shape
@@ -57,5 +57,5 @@ class GenericSource:
 
         return frame
 
-    def get_frame_calibration(self):
-        return self.calibration_data
+    def get_calibration(self):
+        return self.calibration

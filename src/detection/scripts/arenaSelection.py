@@ -9,4 +9,4 @@ if __name__ == '__main__':
         if frame is None:
             break
 
-        arena_selector = detector.ArenaSelector(frame)
+        arena_selector = detector.ArenaDetector(frame)
