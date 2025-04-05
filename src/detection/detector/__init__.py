@@ -1,9 +1,9 @@
 from .aprilTagDetector import AprilTagDetector
-from .arenaDetector import ArenaSelector
+from .arenaDetector import ArenaDetector
 from .diffDetector import DiffDetector
 
 __all__ = [
     'AprilTagDetector',
-    'ArenaSelector',
+    'ArenaDetector',
     'DiffDetector'
 ]
