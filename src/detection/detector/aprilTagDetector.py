@@ -5,11 +5,8 @@ import pyapriltags as apriltag  # Documentation: https://github.com/WillB97/pyap
 from src.detection.calibration.calibration import Calibration
 
 class AprilTagDetector:
-    def __init__(self, options):
-        if 'camera_calibration_path' in options.keys():
-            camera_matrix = Calibration(options['camera_calibration_path']).get()['camera_matrix']
-        else:
-            camera_matrix = np.eye(3)
+    def __init__(self, calibration_data):
+        camera_matrix = calibration_data['camera_matrix']
         fx = camera_matrix[0, 0]
         fy = camera_matrix[1, 1]
         cx = camera_matrix[0, 2]
@@ -17,7 +14,9 @@ class AprilTagDetector:
         self.camera_intrinsics=np.array([fx, fy, cx, cy])
 
         # Initialize the AprilTag detector
-        self.detector = apriltag.Detector(families="tagStandard41h12")
+        # families = 'tag16h5 tag25h9 tag36h11 tagCircle21h7 tagCircle49h12 tagCustom48h12 tagStandard41h12 tagStandard52h13'
+        families = 'tagStandard41h12'
+        self.detector = apriltag.Detector(families=families)
 
     def detect(self, image_gray, debug_image=None):
         # Detect AprilTags

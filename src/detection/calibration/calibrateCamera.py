@@ -101,17 +101,26 @@ def compute_calibration(resolution, img_points, obj_points):
     useFisheyeModel = False
     if not useFisheyeModel:
         ret, camera_matrix, distortion_coeffs, rvecs, tvecs = cv2.calibrateCamera(
-            obj_points, img_points, resolution[::-1], None, None
+            objectPoints=obj_points,
+            imagePoints=img_points,
+            imageSize=resolution,
+            cameraMatrix=None,
+            distCoeffs=None,
+            rvecs=None,
+            tvecs=None,
+            flags=cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_THIN_PRISM_MODEL + cv2.CALIB_TILTED_MODEL,
+            # flags=cv2.CALIB_FIX_PRINCIPAL_POINT + cv2.CALIB_RATIONAL_MODEL + cv2.CALIB_THIN_PRISM_MODEL +cv2.CALIB_TILTED_MODEL,
+            # criteria=(cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6)
         )
     else:
         camera_matrix = np.zeros((3, 3))
-        distortion_coeffs = np.zeros((4, 1))
+        distortion_coeffs = np.zeros((14, 1))
         rvecs = [np.zeros((1, 1, 3), dtype=np.float32) for i in range(len(obj_points))]
         tvecs = [np.zeros((1, 1, 3), dtype=np.float32) for i in range(len(obj_points))]
         ret, _, _, _, _ = cv2.fisheye.calibrate(
             objectPoints=obj_points.reshape((-1, 1, 3)).astype(np.float32),
             imagePoints=img_points.reshape((-1, 1, 2)).astype(np.float32),
-            image_size=resolution[::-1],
+            image_size=resolution,
             K=camera_matrix,
             D=distortion_coeffs,
             rvecs=rvecs,
@@ -147,11 +156,12 @@ def compute_calibration(resolution, img_points, obj_points):
 
     # Save calibration results
     calibration_result = {
-         "useFisheyeModel": useFisheyeModel,
-         "resolution": resolution.tolist(),
-         "camera_matrix": camera_matrix.tolist(),
-         "distortion_coeffs": distortion_coeffs.tolist(),
-         "mean_error": mean_error
+        "useFisheyeModel": useFisheyeModel,
+        "resolution": resolution.squeeze().tolist(),
+        "camera_matrix": camera_matrix.squeeze().tolist(),
+        "distortion_coeffs": distortion_coeffs.squeeze().tolist(),
+        "mean_error": mean_error,
+        "max_error": max_error,
     }
     json_object = json.dumps(calibration_result, indent=4)
     with open("camera_calibration.json", "w") as outfile:
@@ -181,6 +191,13 @@ else:
     for i in range(len(obj_points)):
         obj_points[i] = april_tag_points
     print(obj_points)
+
+    max_corner = np.zeros(2)
+    for i, detection in enumerate(img_points):
+        for j, corner in enumerate(detection):
+            # img_points[i][j] = corner[::-1]
+            max_corner = np.max([img_points[i][j], max_corner], axis=0)
+    print(f"max_corner: {max_corner}")
 
 compute_calibration(resolution, img_points, obj_points)
 

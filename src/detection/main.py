@@ -10,14 +10,15 @@ import frame_source
 
 if __name__ == '__main__':
     options = {
-        'frame_path': '/home/tiago/repos/fetz_as/src/detection/data/testSeq4.mp4',
+        'frame_path': '/home/tiago/Documents/CamTestFootage/vids_position_top_down/output_bot_april_corners.mp4',
+        # 'camera_calibration_path': '/home/tiago/repos/fetz_as/src/detection/calibration/camera_calibration_guess.json'
         'camera_calibration_path': '/home/tiago/repos/fetz_as/src/detection/calibration/camera_calibration.json'
     }
 
     frame_source = frame_source.GenericSource(frame_source.SourceType.Video, options=options)
 
     diff_detector = detector.DiffDetector()
-    april_tag_detector = detector.AprilTagDetector(options)
+    april_tag_detector = detector.AprilTagDetector(frame_source.get_frame_calibration())
     while True:
         frame = frame_source.get_frame()
         if frame is None:

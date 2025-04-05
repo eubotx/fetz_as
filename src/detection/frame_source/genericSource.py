@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 
 from src.detection.frame_source import VideoFileSource, WebCamSource, ImageFileSource
+from src.detection.calibration.calibration import Calibration
 from src.detection.frame_source.imageRectification import ImageRectification
 
 from enum import Enum
@@ -22,8 +23,10 @@ class GenericSource:
         else:
             raise Exception(f"Unknown source_type: {source_type}")
 
+        self.calibration_data = Calibration(options).get()
         if 'camera_calibration_path' in options.keys():
-            self.rectification = ImageRectification(options)
+            self.rectification = ImageRectification(self.calibration_data)
+            self.calibration_data = self.rectification.get_rectified_calibration()
         else:
             self.rectification = None
 
@@ -41,12 +44,18 @@ class GenericSource:
             frame = self.source.get_frame()
             self.frame_number += 1
 
+        print(f"Frame size: {frame.shape}")
         if self.rectification is not None:
             frame = self.rectification.rectify(frame)
+            print(f"Rectified frame size: {frame.shape}")
 
         if 'downscale' in self.options.keys():
             height, width, _ = frame.shape
             dim = np.array([width / self.options['downscale'], height / self.options['downscale']]).astype(int)
             frame = cv2.resize(frame, dim, interpolation=cv2.INTER_AREA)
+            print(f"Downscaled frame size: {frame.shape}")
 
         return frame
+
+    def get_frame_calibration(self):
+        return self.calibration_data
