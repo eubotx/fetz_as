@@ -53,7 +53,7 @@ class SimpleNavigator(Node):
             
         self.goal_sub = self.create_subscription(
             PoseStamped, 
-            'camera/enemy/pose', 
+            '/goal_pose', 
             self.goal_callback, 
             10)
             
@@ -63,7 +63,7 @@ class SimpleNavigator(Node):
         # Control timer (30Hz to match your camera)
         self.control_timer = self.create_timer(1.0/30.0, self.control_loop)
         
-        self.get_logger().info("Simple Navigator initialized")
+        #self.get_logger().info("Simple Navigator initialized")
 
     def pose_callback(self, msg):
         """Store the current robot pose from camera"""
@@ -74,7 +74,7 @@ class SimpleNavigator(Node):
         """Store the goal pose"""
         self.goal_pose = msg.pose
         self.goal_pose_header = msg.header
-        self.get_logger().info(f"New goal received: {self.goal_pose.position}")
+        #self.get_logger().info(f"New goal received: {self.goal_pose.position}")
 
     def control_loop(self):
         if self.current_pose is None or self.current_pose_header is None:
