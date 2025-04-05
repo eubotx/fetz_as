@@ -50,7 +50,7 @@ class Calibration:
         res_left = -self.calib['camera_matrix'][1][2]
         res_right = self.calib['resolution'][1] - self.calib['camera_matrix'][1][2]
         def compute_fov(f, res):
-            return np.arctan(res / (2 * f)) * 180 / np.pi
+            return np.arctan(res / f) * 180 / np.pi
         fx = self.calib['camera_matrix'][0][0]
         fy = self.calib['camera_matrix'][1][1]
         fov_up = compute_fov(fx, res_up)
