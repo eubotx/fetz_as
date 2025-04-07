@@ -5,7 +5,7 @@
 #include <rclc/rclc.h>
 #include <rclc/executor.h>
 #include <std_msgs/msg/int32.h>
-#include <std_msgs/msg/float64.h>
+#include <std_msgs/msg/float32.h>
 #include <std_msgs/msg/float64_multi_array.h>
 #include <geometry_msgs/msg/twist.h>
 #include <ESP32Encoder.h>
@@ -87,7 +87,7 @@ rcl_subscription_t pidTuningSubscriber;
 rcl_subscription_t weaponSpeedSubscriber;
 std_msgs__msg__Float64MultiArray pidTuningMsg;
 geometry_msgs__msg__Twist twistMsg;
-std_msgs__msg__Float64 weaponSpeedMsg;
+std_msgs__msg__Float32 weaponSpeedMsg;
 rclc_executor_t executor;
 rclc_support_t support;
 rcl_allocator_t allocator;
@@ -181,35 +181,43 @@ private:
 // MotorDriver class
 class MotorDriver {
 public:
-    MotorDriver(int pin1, int pin2, int pin3, const int maxDutyCycle) : pin1(pin1), pin2(pin2), pin3(pin3), maxDutyCycle(maxDutyCycle) {}
+    MotorDriver(int pin1, int pin2, int pin3, const int maxDutyCycle, int channel, int freq = 5000, int resolution = 8) : 
+        pin1(pin1), pin2(pin2), pin3(pin3), 
+        maxDutyCycle(maxDutyCycle),
+        channel(channel),
+        freq(freq),
+        resolution(resolution) {}
 
-    void init(){
+    void init() {
         pinMode(pin1, OUTPUT);
         pinMode(pin2, OUTPUT);
-        pinMode(pin3, OUTPUT);
+        
+        // Configure LEDC channel
+        ledcSetup(channel, freq, resolution);
+        ledcAttachPin(pin3, channel);
     }
 
     void update() {
         if (dutyCycle > 0) {
             digitalWrite(pin2, LOW);
             digitalWrite(pin1, HIGH);
-            analogWrite(pin3, abs(dutyCycle));
+            ledcWrite(channel, abs(dutyCycle));
         } else if (dutyCycle < 0) {
             digitalWrite(pin1, LOW);
             digitalWrite(pin2, HIGH);
-            analogWrite(pin3, abs(dutyCycle));
+            ledcWrite(channel, abs(dutyCycle));
         } else {
-            digitalWrite(pin3, LOW);
+            ledcWrite(channel, 0);
         }
     }
 
     void stop() {
         digitalWrite(pin1, LOW);
         digitalWrite(pin2, LOW);
-        digitalWrite(pin3, LOW);
+        ledcWrite(channel, 0);
     }
 
-    void setMotorDutyCycle(int dutyCycle){
+    void setMotorDutyCycle(int dutyCycle) {
         this->dutyCycle = (int)constrain(dutyCycle, -maxDutyCycle, maxDutyCycle);
     }
 
@@ -219,6 +227,9 @@ private:
     int pin1, pin2, pin3;
     int dutyCycle = 0;
     int maxDutyCycle;
+    int channel;
+    int freq;
+    int resolution;
 };
 
 // PIDController class
@@ -385,31 +396,77 @@ private:
 // Weapon class
 class Weapon {
 public:
-    Weapon(int pinPwm, int maxDutyCycle)
-    :pinPwm(pinPwm), maxDutyCycle(maxDutyCycle){};
-
-    void setWeaponSpeed(double weaponSpeed){
-      this->weaponSpeed = weaponSpeed;
-      motorControllerDutyCycle = int(round(weaponSpeed * maxDutyCycle));
+    Weapon(int pwmPin, int channel, int pwmFreq = 50, int pwmResolution = 12,
+           int pwmMin = 205, int pwmMax = 410, int pwmArm = 184)
+        : pinPwm(pwmPin),
+          channel(channel),
+          freq(pwmFreq),
+          resolution(pwmResolution),
+          PWM_MIN(pwmMin),
+          PWM_MAX(pwmMax),
+          PWM_ARM(pwmArm),
+          maxDutyCycle(pwmMax) {
     }
 
-    void init(){
-      pinMode(pinPwm, OUTPUT);
+    void setWeaponSpeed(double speed) {
+        weaponSpeed = constrain(speed, 0.0, 1.0);
+        motorControllerDutyCycle = mapFloat(weaponSpeed, 0.0, 1.0, PWM_MIN, PWM_MAX);
     }
 
-    void update(){
-      analogWrite(pinPwm, abs(motorControllerDutyCycle));
+    void init() {
+        // Configure PWM with LEDC
+        ledcSetup(channel, freq, resolution);
+        ledcAttachPin(pinPwm, channel);
+        
+        // Execute arming sequence
+        performArmingSequence();
+    }
+
+    void update() {
+        ledcWrite(channel, motorControllerDutyCycle);
     }
 
     void stop() {
-      digitalWrite(pinPwm, LOW);
+        ledcWrite(channel, PWM_MIN);  // Send minimum throttle
+    }
+
+    double getCurrentSpeed() const {
+        return weaponSpeed;
     }
 
 private:
-  double weaponSpeed = 0.0;
-  int motorControllerDutyCycle = 0;
-  int maxDutyCycle;
-  int pinPwm;  
+    // Configuration parameters (set during construction)
+    const int pinPwm;
+    const int channel;
+    const int freq;
+    const int resolution;
+    const int PWM_MIN;
+    const int PWM_MAX;
+    const int PWM_ARM;
+    const int maxDutyCycle;
+    
+    // Runtime variables
+    double weaponSpeed = 0.0;
+    int motorControllerDutyCycle = PWM_MIN;  // Start at minimum throttle
+
+    void performArmingSequence() {
+        
+        // 1. Send low throttle
+        ledcWrite(channel, PWM_MIN);
+        delay(100);
+        
+        // 2. Send arming pulse
+        ledcWrite(channel, PWM_ARM);
+        delay(100);
+        
+        // 3. Return to low throttle
+        ledcWrite(channel, PWM_MIN);
+        delay(100);
+    }
+
+    float mapFloat(float x, float in_min, float in_max, float out_min, float out_max) {
+        return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+    }
 };
 
 // RobotControl Class
@@ -483,8 +540,8 @@ Encoder leftEncoder(LEFT_ENCODER_C1_PIN, LEFT_ENCODER_C2_PIN, ENCODER_TICKS_PER_
 Encoder rightEncoder(RIGHT_ENCODER_C1_PIN, RIGHT_ENCODER_C2_PIN, ENCODER_TICKS_PER_REVOLUTION,ENCODER_PT1_TIMECONSTANT_S, UPDATE_INTERVAL_ENCODER);
 
 // Initialize motor controllers
-MotorDriver leftMotorDriver(MOTORDRIVER_LEFT_CW_PIN, MOTORDRIVER_LEFT_CCW_PIN, MOTORDRIVER_LEFT_PWM_PIN,  MAX_MOTOR_DRIVER_DUTYCYCLE);
-MotorDriver rightMotorDriver(MOTORDRIVER_RIGHT_CW_PIN, MOTORDRIVER_RIGHT_CCW_PIN, MOTORDRIVER_RIGHT_PWM_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE);
+MotorDriver leftMotorDriver(MOTORDRIVER_LEFT_CW_PIN, MOTORDRIVER_LEFT_CCW_PIN, MOTORDRIVER_LEFT_PWM_PIN,  MAX_MOTOR_DRIVER_DUTYCYCLE, 0);
+MotorDriver rightMotorDriver(MOTORDRIVER_RIGHT_CW_PIN, MOTORDRIVER_RIGHT_CCW_PIN, MOTORDRIVER_RIGHT_PWM_PIN, MAX_MOTOR_DRIVER_DUTYCYCLE, 1);
 
 // Initialize PID controllers
 PIDController leftPid(KP, KI, KD, KI_MAX);
@@ -499,7 +556,7 @@ Wheel leftWheel(leftMotor, GEARBOX_RATIO);
 Wheel rightWheel(rightMotor, GEARBOX_RATIO);
 
 // Initialize Weapon
-Weapon weapon(MOTORDRIVER_WEAPON_PIN, MAX_WEAPON_MOTOR_DRIVER_DUTYCYCLE);
+Weapon weapon(MOTORDRIVER_WEAPON_PIN, 14);
 
 // Initialize robot control
 RobotControl robot(leftWheel, rightWheel, weapon, WHEEL_DIAMETER, WHEEL_DISTANCE);
@@ -576,11 +633,10 @@ void pid_tuning_callback(const void* msgin) {
 
 // PID tuning callback
 void weapon_speed_callback(const void* msgin) {
-    const std_msgs__msg__Float64* msg = (const std_msgs__msg__Float64*)msgin;
+    const std_msgs__msg__Float32* msg = (const std_msgs__msg__Float32*)msgin;
 
     double weaponSpeed = msg->data;
 
-    // Update PID parameters for both left and right controllers
     weapon.setWeaponSpeed(weaponSpeed);
 }
 
@@ -599,7 +655,7 @@ void setup() {
     RCCHECK(rclc_node_init_default(&node, "diff_drive_bot_esp32", "", &support));
     RCCHECK(rclc_subscription_init_default(&twistSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(geometry_msgs, msg, Twist), "cmd_vel"));  //TODO change to best effort?
     RCCHECK(rclc_subscription_init_default(&pidTuningSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64MultiArray), "drive/pid_tuning"));  //TODO change to parameter?
-    RCCHECK(rclc_subscription_init_default(&weaponSpeedSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float64), "weapon/speed"));
+    RCCHECK(rclc_subscription_init_default(&weaponSpeedSubscriber, &node, ROSIDL_GET_MSG_TYPE_SUPPORT(std_msgs, msg, Float32), "weapon/speed"));
     pidTuningMsg.data.capacity = 4;  // 4 values for the left and right PID tuning (Kp, Ki, Kd, KiMax)
     pidTuningMsg.data.size = 4;      // 8 values total (4 for left, 4 for right)
     pidTuningMsg.data.data = (double*)malloc(4 * sizeof(double)); // Allocate memory for 8 values
@@ -646,7 +702,7 @@ void setup() {
 
     const unsigned int timer_period_ms = 100;
     RCCHECK(rclc_timer_init_default2(&timer, &support, RCL_MS_TO_NS(timer_period_ms), timer_callback, true));
-    RCCHECK(rclc_executor_init(&executor, &support.context, 3, &allocator));
+    RCCHECK(rclc_executor_init(&executor, &support.context, 4, &allocator));
     RCCHECK(rclc_executor_add_timer(&executor, &timer));
     RCCHECK(rclc_executor_add_subscription(&executor, &twistSubscriber, &twistMsg, &cmd_vel_callback, ON_NEW_DATA));
     RCCHECK(rclc_executor_add_subscription(&executor, &pidTuningSubscriber, &pidTuningMsg, &pid_tuning_callback, ON_NEW_DATA));
