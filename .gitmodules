@@ -7,3 +7,7 @@
 [submodule "src/detection/calibration/fisheye-camera-undistortion"]
 	path = src/detection/calibration/fisheye-camera-undistortion
 	url = https://github.com/eubotx/fisheye-camera-undistortion.git
+[submodule "src/slider_publisher"]
+	path = src/slider_publisher
+	url = https://github.com/oKermorgant/slider_publisher.git
+	branch = ros2
