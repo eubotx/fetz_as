@@ -52,6 +52,18 @@ def generate_launch_description():
                 'example.launch'
             )
         ),
+        launch_arguments={'file': './config/Float32.yaml'}.items()
+    )
+
+    # Include the slider_publisher launch file with the parameters
+    slider_publisher = IncludeLaunchDescription(
+        XMLLaunchDescriptionSource(
+            os.path.join(
+                get_package_share_directory('utils'),
+                'launch',
+                'weaponspeed_slider.launch'
+            )
+        ),
         launch_arguments={'file': 'Float32.yaml'}.items()
     )
 
