@@ -20,22 +20,21 @@
 // Robot parameters
 constexpr double WHEEL_DIAMETER = 0.04;
 constexpr double WHEEL_DISTANCE = 0.12;
-constexpr double MAX_MOTOR_SPEED = 65.0;  // Max speed in RPS
-constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 250;
-constexpr int ENCODER_TICKS_PER_REVOLUTION = 12 * 2;
-constexpr double ENCODER_PT1_TIMECONSTANT_S = 0.0;  //TODO
+constexpr double MAX_MOTOR_SPEED = 180.0;  // Max speed in RPS
+constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 190; //255*(3/4) because we are running 4S Lipo
+constexpr int ENCODER_TICKS_PER_REVOLUTION = 14 * 2;
+constexpr double ENCODER_PT1_TIMECONSTANT_S = 0.1;  //TODO
 constexpr double GEARBOX_RATIO = 1.0/200.0;
 constexpr int MAX_WEAPON_MOTOR_DRIVER_DUTYCYCLE = 50;
 
-constexpr unsigned long UPDATE_INTERVAL_ENCODER = 2;  // In ms
-constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 2;  // In ms
+constexpr unsigned long UPDATE_INTERVAL_ENCODER = 1;  // In ms
+constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 1;  // In ms
 
-
-// PID controller parameters
-constexpr double KP = 2.0;
-constexpr double KI = 0.5;
-constexpr double KD = 0.0;
-constexpr double KI_MAX = 30.0;
+// PID controller parameters - adjust these during tuning
+double KP = 1.0;
+double KI = 3.0;
+double KD = 0.0;
+double KI_MAX = 30.0;
 
 // WiFi configuration
 //constexpr const char* MY_IP = "192.168.8.171"; // Bjoern Gelb DO NOT DELETE
@@ -236,18 +235,20 @@ private:
 class PIDController {
 public:
     PIDController(double Kp, double Ki, double Kd, double KiMax) 
-        : Kp(Kp), Ki(Ki), Kd(Kd), KiMax(KiMax), error(0), integral(0), derivative(0), previousError(0) {}
+        : Kp(Kp), Ki(Ki), Kd(Kd), KiMax(KiMax), error(0), integral(0), derivative(0), previousError(0) {
+          lastTime = micros();
+          }
 
     double compute(double desiredValue, double measuredValue) {
         double deltaTime = (micros() - lastTime) / 1000000.0;
         error = desiredValue - measuredValue;
-        integral = integral + error;
-        integral = constrain(integral, -KiMax, KiMax);  // Anti-windup
-        derivative = error - previousError;
+        integral = integral + error*deltaTime;
+        //integral = constrain(integral, -KiMax, KiMax);  // Anti-windup
+        derivative = (error - previousError)/deltaTime;
         previousError = error;
         lastTime = micros();
 
-        return ((Kp * error) + (Ki * integral) + (Kd * derivative)) * deltaTime;
+        return (Kp * error + Ki * integral + Kd * derivative);
     }
 
     void pause(){
@@ -259,7 +260,7 @@ public:
         integral = 0.0;
         derivative = 0.0;
         previousError = 0.0;
-        lastTime = 0;
+        lastTime = micros();
     }
 
     void setPidValues(double Kp, double Ki, double Kd, double KiMax) {
@@ -320,10 +321,11 @@ public:
             
             if (motorTimeoutThresh > 100) {   // equals 100 * controllCycleTime until motors go to sleep
               motorDriver.stop();
+              motorDriver.setMotorDutyCycle(0);
               pid.pidReset();
             } else {
               int pidValue = int(round(pid.compute(desiredMotorSpeed, encoder.getSpeed()))); // Apply PID control   //TODO ist round wirklich auf vor dezimal?
-              motorDriver.setMotorDutyCycle(motorDriver.getMotorDutyCycle() + pidValue); // Set motor speed based on PWM
+              motorDriver.setMotorDutyCycle(pidValue); // Set motor speed based on PWM
               motorDriver.update();
             }
         }
