@@ -89,7 +89,6 @@ while True:
             
 
             R = detection.pose_R
-            print(R)
 
             yaw =  math.atan2(R[1, 0], R[0, 0])
             offset_yaw = yaw - math.pi/2
