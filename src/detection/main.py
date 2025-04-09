@@ -6,7 +6,7 @@ import numpy as np
 import detector
 import frame_source
 
-from src.detection.math import Pose
+from math_funcs import Pose
 
 # use system plotting
 # plt.switch_backend('macosx')
@@ -28,18 +28,18 @@ april_tag_points = DETECTION_SCALE_RATIO * (april_tag_points - np.array([APRILTA
 if __name__ == '__main__':
     options = {
         # Calibration
-        'camera_calibration_path': '/home/tiago/repos/fetz_as/src/detection/data/USBGS720P02-L170_calibration.json',
+        'camera_calibration_path': 'src/detection/data/USBGS720P02-L170_calibration.json',
         # ROS
         'publish_ros': False,
         # Video
         # 'frame_path': '/home/tiago/Documents/CamTestFootage/vids_position_top_down/output_bot_april_corners.mp4',
-        'frame_path': '/home/tiago/Documents/CamTestFootage/vids_position_top_down/output_april_corner_movement.mp4',
+        'frame_path': 'src/detection/recordings/output_april_corner_movement.mp4',
         # Webcam
-        'webcam_id': 0,
-        'webcam_save_stream_path': '/home/tiago/repos/fetz_as/src/detection/data/testSeqxxx.mp4',
+        'webcam_id': 2,
+        'webcam_save_stream_path': 'src/detection/recordings/testSeqxxx.mp4',
         # Tags
         'arena_tag': {'id': 2, 'family': 'tagStandard41h12'},
-        'robot_tag': {'id': 2, 'family': 'tagStandard41h12'},
+        'robot_tag': {'id': 12, 'family': 'tagStandard41h12'},
     }
 
     # frame_source = frame_source.GenericSource(frame_source.SourceType.Video, options=options)

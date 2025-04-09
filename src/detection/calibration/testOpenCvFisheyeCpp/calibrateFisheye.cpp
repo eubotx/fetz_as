@@ -15,7 +15,7 @@ int main() {
     std::vector<std::vector<cv::Point2f>> imgpoints;
 
     json root;
-    std::string calibDataPath = "/home/tiago/repos/fetz_as/src/detection/data/USBGS720P02-L170_calibration_points.json";
+    std::string calibDataPath = "src/detection/data/USBGS720P02-L170_calibration_points.json.json";
     {
         std::ifstream file(calibDataPath);
         if (!file.is_open()) {

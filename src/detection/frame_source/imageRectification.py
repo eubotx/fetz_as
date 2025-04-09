@@ -69,6 +69,6 @@ class ImageRectification:
                           # interpolation=cv2.INTER_CUBIC,
                           borderMode=cv2.BORDER_CONSTANT,
                           )
-        print(f"Time taken for rectification: {1e3*(timeit.default_timer() - start_time):.3f} ms")
+        #print(f"Time taken for rectification: {1e3*(timeit.default_timer() - start_time):.3f} ms")
         # cv2.imshow("Rectified Frame", frame)
         return frame

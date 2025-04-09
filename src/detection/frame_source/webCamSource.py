@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from src.detection.frame_source.imageRectification import ImageRectification
+from frame_source.imageRectification import ImageRectification
 
 class WebCamSource:
     def __init__(self, options):
