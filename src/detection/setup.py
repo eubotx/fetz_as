@@ -28,6 +28,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
+            'main_lean = detection.main_lean:main',
         ],
     },
 )

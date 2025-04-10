@@ -31,7 +31,7 @@ class DetectionNode(Node):
         # Initialize detectors
         self.frame_source = detection.frame_source.GenericSource(detection.frame_source.SourceType.Webcam, options=self.options)
         self.diff_detector = detection.detector.DiffDetector()
-        self.april_tag_detector = detection.detector.AprilTagDetector(self.detection.frame_source.get_calibration())
+        self.april_tag_detector = detection.detector.AprilTagDetector(self.frame_source.get_calibration())
 
         # ROS publisher
         self.pose_pub = self.create_publisher(PoseStamped, '/camera/pose', 10)
