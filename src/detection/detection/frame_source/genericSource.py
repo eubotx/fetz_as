@@ -1,9 +1,9 @@
 import cv2
 import numpy as np
 
-from frame_source import VideoFileSource, WebCamSource, ImageFileSource
-from calibration.calibration import Calibration
-from frame_source.imageRectification import ImageRectification
+from detection.frame_source import VideoFileSource, WebCamSource, ImageFileSource
+from detection.calibration.calibration import Calibration
+from detection.frame_source.imageRectification import ImageRectification
 
 from enum import Enum
 class SourceType(Enum):

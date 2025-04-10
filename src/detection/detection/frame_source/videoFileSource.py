@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from frame_source.imageRectification import ImageRectification
+from detection.frame_source.imageRectification import ImageRectification
 
 class VideoFileSource:
     def __init__(self, options):

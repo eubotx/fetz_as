@@ -1,6 +1,6 @@
 import numpy as np
 from PIL import Image
-from bitstring import options
+#from bitstring import options
 
 
 class ImageFileSource:
