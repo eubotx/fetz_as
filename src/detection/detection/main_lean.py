@@ -22,7 +22,7 @@ class DetectionNode(Node):
             'camera_calibration_path': 'src/detection/data/USBGS720P02-L170_calibration.json',
             'publish_ros': True,
             'frame_path': 'src/detection/recordings/output_april_corner_movement.mp4',
-            'webcam_id': 2,
+            'webcam_id': 4,
             'webcam_save_stream_path': 'src/detection/recordings/testSeqxxx.mp4',
             'arena_tag': {'id': 2, 'family': 'tagStandard41h12'},
             'robot_tag': {'id': 12, 'family': 'tagStandard41h12'},

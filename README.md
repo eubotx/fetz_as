@@ -271,6 +271,7 @@ Now, sourcing is mentioned only once per terminal tab section, making it a bit m
 
 ## Pip Magic no idea if reproducable worst case we take my desktop PC
 What I did
+python3 -m venv src/detection/detection/venv
 source src/detection/detection/venv/bin/activate
 pip install numpy - optional
 pip install pyapriltags - optional
