@@ -150,7 +150,7 @@ df = DoubleFisheye(np.array([[1,0,0],[0,1,0],[0,0,1]]), np.array([0,0]))
 # df.project(np.random.rand(3,100))
 # df.unproject(np.random.rand(2,100))
 
-with open('/home/tiago/repos/fetz_as/src/detection/data/USBGS720P02-L170_calibration_points.json', 'r') as f:
+with open('src/detection/data/USBGS720P02-L170_calibration_points.json', 'r') as f:
     json_data = json.load(f)
     calib_data = {key: np.array(value) for key, value in json_data.items()}
 

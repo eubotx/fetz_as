@@ -268,3 +268,34 @@ We hope you enjoy building and controlling your autonomous battle bot with **FET
 - The **sourcing** step (`source install/local_setup.bash`) is now included **once** at the beginning of each section where terminal tabs are mentioned (i.e., before launching any node). This avoids repeating it before every single command while ensuring it’s still clear when it needs to be done.
 
 Now, sourcing is mentioned only once per terminal tab section, making it a bit more concise and clean. Let me know if this looks better!
+
+## Pip Magic no idea if reproducable worst case we take my desktop PC
+What I did
+python3 -m venv src/detection/detection/venv
+source src/detection/detection/venv/bin/activate
+pip install numpy - optional
+pip install pyapriltags - optional
+pip install src/detection/.
+source install/setup.bash
+deactivate
+
+
+source install/setup.bash
+colcon build --packages-select detection --symlink-install
+source install/setup.bash
+
+ros2 run detection main_lean
+
+
+## Other useful stuff:
+src/detection/requirements.txt
+
+
+rm -rf build install log
+
+colcon build --packages-select detection --symlink-install
+
+python3 -m venv venv
+source src/detection/detection/venv/bin/activate
+
+pip install src/detection/.

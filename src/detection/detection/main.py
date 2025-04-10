@@ -6,7 +6,7 @@ import numpy as np
 import detector
 import frame_source
 
-from src.detection.math import Pose
+from math_funcs import Pose
 
 # use system plotting
 # plt.switch_backend('macosx')
@@ -27,20 +27,31 @@ april_tag_points = DETECTION_SCALE_RATIO * (april_tag_points - np.array([APRILTA
 
 if __name__ == '__main__':
     options = {
-        # 'frame_path': '/home/tiago/Documents/CamTestFootage/vids_position_top_down/output_bot_april_corners.mp4',
-        'frame_path': '/home/tiago/Documents/CamTestFootage/vids_position_top_down/output_april_corner_movement.mp4',
-        'camera_calibration_path': '/home/tiago/repos/fetz_as/src/detection/data/USBGS720P02-L170_calibration.json',
+        # Calibration
+        'camera_calibration_path': 'src/detection/data/USBGS720P02-L170_calibration.json',
+        # ROS
         'publish_ros': False,
+        # Video
+        # 'frame_path': '/home/tiago/Documents/CamTestFootage/vids_position_top_down/output_bot_april_corners.mp4',
+        'frame_path': 'src/detection/recordings/output_april_corner_movement.mp4',
+        # Webcam
+        'webcam_id': 2,
+        'webcam_save_stream_path': 'src/detection/recordings/testSeqxxx.mp4',
+        # Tags
+        'arena_tag': {'id': 2, 'family': 'tagStandard41h12'},
+        'robot_tag': {'id': 12, 'family': 'tagStandard41h12'},
     }
 
-    frame_source = frame_source.GenericSource(frame_source.SourceType.Video, options=options)
+    # frame_source = frame_source.GenericSource(frame_source.SourceType.Video, options=options)
+    frame_source = frame_source.GenericSource(frame_source.SourceType.Webcam, options=options)
+
 
     ros_publisher = None
 
     diff_detector = detector.DiffDetector()
     april_tag_detector = detector.AprilTagDetector(frame_source.get_calibration())
     arena_detector = None
-    cameraFromWorld = None
+    cameraFromWorld = Pose()
     while True:
         print('Getting frame...')
         frame = frame_source.get_frame()
@@ -55,10 +66,11 @@ if __name__ == '__main__':
         if isinstance(april_tag_output, dict) and april_tag_output["debug_image"] is not None:
             cv2.imshow("AprilTagDetector Debug Image", april_tag_output["debug_image"])
 
-        if arena_detector is None:
-            # Initialize the arena detector
+        if arena_detector is None and 'arena_tag' in options.keys():
+            # Initialize the arena detector and estimate arena pose
             arena_detector = detector.ArenaDetector(frame)
-            arena_tag = {'id': 2, 'family': 'tagStandard41h12'}
+            arena_tag = options['arena_tag']
+            cameraFromWorld = None
             for detection in april_tag_detections:
                 if detection.tag_family.decode() == arena_tag['family'] and detection.tag_id == arena_tag['id']:
                     cameraFromWorld = Pose(detection.pose_R, detection.pose_t)
@@ -71,7 +83,7 @@ if __name__ == '__main__':
         print(f'Detecting robot...')
 
         # Detect Robot
-        robot_tag = {'id':2, 'family': 'tagStandard41h12'}
+        robot_tag = options['robot_tag']
         robot_shape = np.array([[0,0,0], [1,0,0], [0.75, 0.5, 0], [0.25, 0.5, 0], [0, 0, 0]])
         for detection in april_tag_detections:
             if detection.tag_family.decode() == robot_tag['family'] and detection.tag_id == robot_tag['id']:

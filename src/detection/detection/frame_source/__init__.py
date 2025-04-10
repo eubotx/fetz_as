@@ -1,6 +1,7 @@
 from .webCamSource import WebCamSource
 from .videoFileSource import VideoFileSource
 from .imageFileSource import ImageFileSource
+from .genericSource import SourceType
 from .genericSource import *
 
 __all__ = [
