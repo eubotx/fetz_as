@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 import json
-import frame_source
+import detection.frame_source
 
 
 # Global variables
@@ -18,7 +18,7 @@ options = {
     # 'frame_path': '/home/tiago/Documents/CamTestFootage/vids_position_top_down/output_bot_april_corners.mp4',
     'frame_path': 'src/detection/recordings/output_april_corner_movement.mp4',
     # Webcam
-    'webcam_id': 2,
+    'webcam_id': 4,
     'webcam_save_stream_path': 'src/detection/recordings/testSeqxxx.mp4',
     # Tags
     'arena_tag': {'id': 2, 'family': 'tagStandard41h12'},
@@ -26,7 +26,7 @@ options = {
 }
 
  # frame_source = frame_source.GenericSource(frame_source.SourceType.Video, options=options)
-frame_source = frame_source.GenericSource(frame_source.SourceType.Webcam, options=options)
+frame_source = detection.frame_source.GenericSource(detection.frame_source.SourceType.Webcam, options=options)
 
 # Function to handle mouse click events
 def click_event(event, x, y, flags, param):

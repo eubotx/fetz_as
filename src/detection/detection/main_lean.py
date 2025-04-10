@@ -9,6 +9,26 @@ from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
 from builtin_interfaces.msg import Time
 
+
+def euler_to_quaternion(roll, pitch, yaw):
+    """
+    Convert Euler angles to quaternion (x, y, z, w)
+    """
+    cy = math.cos(yaw * 0.5)
+    sy = math.sin(yaw * 0.5)
+    cp = math.cos(pitch * 0.5)
+    sp = math.sin(pitch * 0.5)
+    cr = math.cos(roll * 0.5)
+    sr = math.sin(roll * 0.5)
+
+    qw = cr * cp * cy + sr * sp * sy
+    qx = sr * cp * cy - cr * sp * sy
+    qy = cr * sp * cy + sr * cp * sy
+    qz = cr * cp * sy - sr * sp * cy
+
+    return qx, qy, qz, qw
+
+
 class DetectionNode(Node):
     def __init__(self):
         super().__init__('detection_node')
@@ -70,7 +90,7 @@ class DetectionNode(Node):
                 center = tuple(detection.center.astype(int))
                 R = detection.pose_R
                 yaw = math.atan2(R[1, 0], R[0, 0])
-                offset_yaw = yaw - math.pi / 2
+                offset_yaw = yaw - math.pi / 2  # Adjust for forward-facing direction
 
                 # Draw and debug
                 robot_img = transformed.copy()
@@ -80,7 +100,7 @@ class DetectionNode(Node):
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 cv2.imshow("Robot Pose", robot_img)
 
-                # Publish to ROS2
+                # Prepare PoseStamped message
                 pose_msg = PoseStamped()
                 pose_msg.header.frame_id = "camera_frame"
                 pose_msg.header.stamp = self.get_clock().now().to_msg()
@@ -88,9 +108,10 @@ class DetectionNode(Node):
                 pose_msg.pose.position.y = float(center[1])
                 pose_msg.pose.position.z = 0.0
 
-                # Yaw as quaternion
-                qz = math.sin(offset_yaw / 2.0)
-                qw = math.cos(offset_yaw / 2.0)
+                # Convert yaw to quaternion
+                qx, qy, qz, qw = euler_to_quaternion(0.0, 0.0, offset_yaw)
+                pose_msg.pose.orientation.x = qx
+                pose_msg.pose.orientation.y = qy
                 pose_msg.pose.orientation.z = qz
                 pose_msg.pose.orientation.w = qw
 
@@ -104,6 +125,7 @@ class DetectionNode(Node):
         if cv2.waitKey(1) & 0xFF == ord('q'):
             self.get_logger().info("Exiting...")
             rclpy.shutdown()
+
 
 def main(args=None):
     rclpy.init(args=args)

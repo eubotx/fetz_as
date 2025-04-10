@@ -13,6 +13,8 @@ setup(
 
         # Launch files
         ('share/' + package_name + '/launch', ['launch/weaponspeed_slider.launch']),
+        ('share/' + package_name + '/launch', ['launch/teleop_rhino.launch.py']),
+
 
         # Config files
         ('share/' + package_name + '/config/joy_teleop', ['config/joy_teleop/rhinozeros_teleop.config.yaml']),

@@ -18,8 +18,8 @@
 
 
 // Robot parameters
-constexpr double WHEEL_DIAMETER = 0.04;
-constexpr double WHEEL_DISTANCE = 0.12;
+constexpr double WHEEL_DIAMETER = 0.069;
+constexpr double WHEEL_DISTANCE = 0.19;
 constexpr double MAX_MOTOR_SPEED = 180.0;  // Max speed in RPS
 constexpr int MAX_MOTOR_DRIVER_DUTYCYCLE = 190; //255*(3/4) because we are running 4S Lipo
 constexpr int ENCODER_TICKS_PER_REVOLUTION = 14 * 2;
@@ -34,7 +34,7 @@ constexpr unsigned long UPDATE_INTERVAL_PID_CONTROL = 1;  // In ms
 double KP = 1.0;
 double KI = 3.0;
 double KD = 0.0;
-double KI_MAX = 30.0;
+double KI_MAX = 20.0;
 
 // WiFi configuration
 //constexpr const char* MY_IP = "192.168.8.171"; // Bjoern Gelb DO NOT DELETE
@@ -243,7 +243,7 @@ public:
         double deltaTime = (micros() - lastTime) / 1000000.0;
         error = desiredValue - measuredValue;
         integral = integral + error*deltaTime;
-        //integral = constrain(integral, -KiMax, KiMax);  // Anti-windup
+        integral = constrain(integral, -KiMax, KiMax);  // Anti-windup
         derivative = (error - previousError)/deltaTime;
         previousError = error;
         lastTime = micros();
@@ -487,8 +487,8 @@ public:
         double linearWheelSpeed = linear;
         double angularWheelSpeed = angular * (wheelDistance / 2.0);
         
-        double leftWheelSpeed = linearWheelSpeed - angularWheelSpeed;
-        double rightWheelSpeed = linearWheelSpeed + angularWheelSpeed;
+        double leftWheelSpeed = linearWheelSpeed + angularWheelSpeed;
+        double rightWheelSpeed = linearWheelSpeed - angularWheelSpeed;
 
         // Convert the wheel speeds from m/s to rps
         double leftWheelRps = leftWheelSpeed / (M_PI * wheelDiameter);
