@@ -13,7 +13,7 @@ class Pose:
         elif isinstance(other, np.ndarray):
             return self.R @ other.reshape([3,1]) + self.t
         else:
-            raise TypeError(f"Unsupported type for multiplication: {type(other)}")
+            raise TypeError(f"Unsupported type for multiplication. Self: {type(self)}, Other: {type(other)}")
 
     def inv(self):
         R_inv = self.R.T

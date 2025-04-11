@@ -3,6 +3,7 @@ import numpy as np
 import json
 import detection.frame_source
 import detection.detector
+from detection.math_funcs import *
 import math
 import rclpy
 from rclpy.node import Node
@@ -29,6 +30,43 @@ def euler_to_quaternion(roll, pitch, yaw):
     return qx, qy, qz, qw
 
 
+def quaternion_from_vectors(v1, v2):
+    print(f'v1: {v1}, v2: {v2}')
+    v1 = np.array(v1, dtype=np.float64).squeeze()
+    v2 = np.array(v2, dtype=np.float64).squeeze()
+    print(f'v1: {v1}, v2: {v2}')
+
+    v1 /= np.linalg.norm(v1)
+    v2 /= np.linalg.norm(v2)
+
+    dot = np.dot(v1, v2)
+
+    if np.allclose(dot, 1.0):
+        # Vectors are the same
+        return np.array([1.0, 0.0, 0.0, 0.0])  # Identity quaternion
+    elif np.allclose(dot, -1.0):
+        # Vectors are opposite
+        # Find an orthogonal vector to use as rotation axis
+        orthogonal = np.array([1.0, 0.0, 0.0])
+        if np.allclose(v1, orthogonal):
+            orthogonal = np.array([0.0, 1.0, 0.0])
+        axis = np.cross(v1, orthogonal)
+        axis /= np.linalg.norm(axis)
+        return np.concatenate([[0.0], axis])  # 180-degree rotation
+
+    axis = np.cross(v1, v2)
+    s = np.sqrt((1.0 + dot) * 2.0)
+    invs = 1.0 / s
+
+    q = np.array([
+        axis[0] * invs,
+        axis[1] * invs,
+        axis[2] * invs,
+        s * 0.5
+    ])
+    return q
+
+
 class DetectionNode(Node):
     def __init__(self):
         super().__init__('detection_node')
@@ -42,19 +80,26 @@ class DetectionNode(Node):
             'camera_calibration_path': 'src/detection/data/USBGS720P02-L170_calibration.json',
             'publish_ros': True,
             'frame_path': 'src/detection/recordings/output_april_corner_movement.mp4',
-            'webcam_id': 4,
+            'webcam_id': 2,
             'webcam_save_stream_path': 'src/detection/recordings/testSeqxxx.mp4',
-            'arena_tag': {'id': 2, 'family': 'tagStandard41h12'},
-            'robot_tag': {'id': 12, 'family': 'tagStandard41h12'},
+            # Tags
+            'arena_tag': {'id': 2, 'family': 'tagStandard41h12', 'size': 0.125},
+            'robot_tags': { 'sizes' : 0.125, 'family': 'tagStandard41h12',
+                'top_id': 12,
+                'bottom_id': 31},
         }
 
         # Initialize detectors
         self.frame_source = detection.frame_source.GenericSource(detection.frame_source.SourceType.Webcam, options=self.options)
-        self.diff_detector = detection.detector.DiffDetector()
+        self.robot_detector = detection.detector.RobotDetector(self.options, self.frame_source.get_calibration())
+        self.enemy_detector = detection.detector.EnemyDetector(self.options)
         self.april_tag_detector = detection.detector.AprilTagDetector(self.frame_source.get_calibration())
+        self.arena_detector = None
+        self.cameraFromWorld = None
 
         # ROS publisher
-        self.pose_pub = self.create_publisher(PoseStamped, '/camera/pose', 10)
+        self.robot_pub = self.create_publisher(PoseStamped, '/camera/pose', 10)
+        self.enemy_pub = self.create_publisher(PoseStamped, '/camera/enemy/pose', 10)
 
         # Run main loop
         self.timer = self.create_timer(0.03, self.process_frame)  # ~30 FPS
@@ -86,56 +131,105 @@ class DetectionNode(Node):
             self.get_logger().warn("No frame captured")
             return
 
-        transformed = cv2.warpPerspective(frame, self.matrix, (self.arena_width, self.arena_height))
-        gray = cv2.cvtColor(transformed, cv2.COLOR_BGR2GRAY)
+        # transformed = cv2.warpPerspective(frame, self.matrix, (self.arena_width, self.arena_height))
+        # gray = cv2.cvtColor(transformed, cv2.COLOR_BGR2GRAY)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-        april_tag_output = self.april_tag_detector.detect(gray, transformed.copy())
-        april_tag_detections = april_tag_output["aprilTags"]
+        if self.cameraFromWorld is None:
+            april_tag_output = self.april_tag_detector.detect(gray, self.options['arena_tag']['size'], frame.copy())
+            april_tag_detections = april_tag_output["aprilTags"]
+            for detection in april_tag_detections:
+                if (detection.tag_family.decode() == self.options['arena_tag']['family'] and
+                    detection.tag_id == self.options['arena_tag']['id']):
+                    self.cameraFromWorld = Pose(detection.pose_R, detection.pose_t)
+                    print(
+                        f"Detected arena tag: {self.options['arena_tag']['family']}-{self.options['arena_tag']['id']}. "
+                        f"Defined cameraFromWorld:\n{self.cameraFromWorld}")
+            if not self.cameraFromWorld:
+                print(f"Could not find aarena tag: {self.options['arena_tag']['family']}-{self.options['arena_tag']['id']}. Retrying...")
+                return
 
-        robot_tag = self.options['robot_tag']
-        for detection in april_tag_detections:
-            if detection.tag_family.decode() == robot_tag['family'] and detection.tag_id == robot_tag['id']:
-                # Get original detection in image coordinates
-                img_center = tuple(detection.center.astype(int))
-                R = detection.pose_R
-                yaw = math.atan2(R[1, 0], R[0, 0])
-                offset_yaw = yaw - math.pi / 2  # Adjust for forward-facing direction
+        ##################
+        robot_detection = self.robot_detector.detect(gray, self.cameraFromWorld.inv(), frame.copy())
+        if robot_detection is None:
+            return
+        # robot_detection['worldFromRobot'] = Pose(np.array([[1,0,0],[0,-1,0],[0,0,1]])) * robot_detection['worldFromRobot']
+        print(f'Robot in world: {robot_detection['worldFromRobot'].t}')
+        # Prepare PoseStamped message with arena coordinates
+        pose_msg = PoseStamped()
+        pose_msg.header.frame_id = "map"
+        pose_msg.header.stamp = self.get_clock().now().to_msg()
+        pose_msg.pose.position.x = float(robot_detection['worldFromRobot'].t[0])
+        pose_msg.pose.position.y = float(robot_detection['worldFromRobot'].t[1])
+        # pose_msg.pose.position.z = float(robot_detection['worldFromRobot'].t[2])
+        pose_msg.pose.position.z = float(0)
 
-                # Transform to arena coordinates
-                arena_center = self.transform_coordinates(img_center)
-                arena_yaw = self.transform_yaw(offset_yaw)
+        # Convert arena yaw to quaternion
+        # qx, qy, qz, qw = euler_to_quaternion(0.0, 0.0, arena_yaw)
+        robotXInWorld = robot_detection['worldFromRobot'] * np.array([0, -1, 0])
+        qx, qy, qz, qw = quaternion_from_vectors(robotXInWorld, np.array([1, 0, 0]))
+        pose_msg.pose.orientation.x = float(qx)
+        pose_msg.pose.orientation.y = float(qy)
+        pose_msg.pose.orientation.z = float(qz)
+        pose_msg.pose.orientation.w = float(qw)
+        self.robot_pub.publish(pose_msg)
 
-                # Draw and debug (using image coordinates for visualization)
-                robot_img = transformed.copy()
-                cv2.circle(robot_img, img_center, 5, (0, 0, 255), -1)
-                self.draw_forward_direction_axis(robot_img, img_center, -offset_yaw)
-                cv2.putText(robot_img, f"Yaw: {offset_yaw:.2f} rad", (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                cv2.putText(robot_img, f"Arena Pos: {arena_center}", (10, 70),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                cv2.imshow("Robot Pose", robot_img)
+        #####
+        enemy_detection = self.enemy_detector.detect(gray, robot_detection, frame.copy())
+        if enemy_detection is None:
+            return
+        enemyInCamera2D = enemy_detection['enemyInCamera2D']
 
-                # Prepare PoseStamped message with arena coordinates
-                pose_msg = PoseStamped()
-                pose_msg.header.frame_id = "map"
-                pose_msg.header.stamp = self.get_clock().now().to_msg()
-                pose_msg.pose.position.x = float(arena_center[0])/450.0
-                pose_msg.pose.position.y = float(arena_center[1])/450.0
-                pose_msg.pose.position.z = 0.0
+        fx = 225.20511562
+        fy = 225.04733124
+        cx = 283.42090143
+        cy = 271.26381353
+        u = enemyInCamera2D[0]
+        v = enemyInCamera2D[1]
+        depth = robot_detection['cameraFromRobot'].t[2]
+        if depth > 0:  # Valid depth
+            X = (u - cx) * depth / fx
+            Y = (v - cy) * depth / fy
+            Z = depth
+            print(f"3D Point: [{X}, {Y}, {Z}]")
+        enemyInCamera3D = np.array([X,Y,Z])
+        enemyInWorld3D = self.cameraFromWorld.inv() * enemyInCamera3D
 
-                # Convert arena yaw to quaternion
-                qx, qy, qz, qw = euler_to_quaternion(0.0, 0.0, arena_yaw)
-                pose_msg.pose.orientation.x = qx
-                pose_msg.pose.orientation.y = qy
-                pose_msg.pose.orientation.z = qz
-                pose_msg.pose.orientation.w = qw
+        # Prepare PoseStamped message with arena coordinates
+        enemy_msg = PoseStamped()
+        enemy_msg.header.frame_id = "map"
+        enemy_msg.header.stamp = self.get_clock().now().to_msg()
+        enemy_msg.pose.position.x = float(enemyInWorld3D[0])
+        enemy_msg.pose.position.y = float(-enemyInWorld3D[1])
+        # enemy_msg.pose.position.z = float(robot_detection['worldFromRobot'].t[2])
+        enemy_msg.pose.position.z = float(0)
 
-                self.pose_pub.publish(pose_msg)
+        # Convert arena yaw to quaternion
+        qx, qy, qz, qw = quaternion_from_vectors(np.array([1, 0, 0]), np.array([1, 0, 0]))
+        enemy_msg.pose.orientation.x = float(qx)
+        enemy_msg.pose.orientation.y = float(qy)
+        enemy_msg.pose.orientation.z = float(qz)
+        enemy_msg.pose.orientation.w = float(qw)
+        self.enemy_pub.publish(enemy_msg)
 
-        cv2.imshow("Original", frame)
-        cv2.imshow("Transformed", transformed)
-        if isinstance(april_tag_output, dict) and april_tag_output["debug_image"] is not None:
-            cv2.imshow("AprilTags", april_tag_output["debug_image"])
+        # Draw and debug (using image coordinates for visualization)
+        arena_size_m = 1.5
+        metersToPixels = 200
+        robot_arena = np.zeros(np.array([metersToPixels * arena_size_m, metersToPixels * arena_size_m, 3]).astype(int))
+        robotInWorld2D = (metersToPixels * robot_detection['worldFromRobot'].t[0:2]).astype(int).squeeze()
+        robotXInWorld2D = (metersToPixels * robotXInWorld[0:2]).astype(int).squeeze()
+        enemyInWorld2D = (metersToPixels * enemyInWorld3D[0:2]).astype(int).squeeze()
+        print(f'robotInWorld2D: {robotInWorld2D}, robotXInWorld2D: {robotXInWorld2D}')
+        cv2.circle(robot_arena, robotInWorld2D, 5, (0, 0, 255), -1)
+        cv2.arrowedLine(robot_arena, robotInWorld2D, robotXInWorld2D, (0, 255, 0), 5)
+        cv2.circle(robot_arena, enemyInWorld2D, 5, (255, 0, 0), -1)
+
+        cv2.putText(robot_arena, f"Yaw: {robotXInWorld2D} rad", (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.putText(robot_arena, f"Arena Pos: {robotInWorld2D}", (10, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+        cv2.imshow("ROS DATA", robot_arena)
+
 
         if cv2.waitKey(1) & 0xFF == ord('q'):
             self.get_logger().info("Exiting...")

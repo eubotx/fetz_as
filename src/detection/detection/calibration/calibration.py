@@ -25,6 +25,7 @@ class Calibration:
     def change_to_rectified_image(self, calibration_data):
         self.calib_original = self.calib.copy()
         self.calib = calibration_data
+        self.print_calibration()
 
     def project(self, pt3d):
         if self.calib['useFisheyeModel'] and False:
@@ -75,12 +76,14 @@ class Calibration:
 
     def load_default_calibration(self):
         # Default calibration data
+        resolution = np.array([480, 640])
+        focal_length = 300.0
         self.calib = {
-            'camera_matrix': np.array([[1.0, 0, 0.5],
-                                       [0, 1.0, 0.5],
+            'resolution': resolution,
+            'camera_matrix': np.array([[focal_length, 0, resolution[1]/2],
+                                       [0, focal_length, resolution[0]/2],
                                        [0, 0, 1.0]]),
             'distortion_coeffs': np.zeros((5,)),
-            'resolution': np.array([480, 640]),
             'useFisheyeModel': False,
             'mean_error': -1.0,
             'max_error': -1.0,
