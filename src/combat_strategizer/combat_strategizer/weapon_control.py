@@ -3,7 +3,7 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped, Pose
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Bool
 import math
 
 class WeaponSpeedController(Node):
@@ -11,12 +11,13 @@ class WeaponSpeedController(Node):
         super().__init__('weapon_control')
         
         # Declare and get parameters
-        self.declare_parameter('distance_threshold', 1.0)  # default 1.0 meter
+        self.declare_parameter('distance_threshold', 0.41)  # default 1.0 meter
         self.threshold = self.get_parameter('distance_threshold').value
         
         # Flags to track topic availability
         self.goal_pose_received = False
         self.robot_pose_received = False
+        self.weapon_armed = False
         
         # Create publisher for weapon speed
         self.weapon_speed_pub = self.create_publisher(
@@ -25,7 +26,7 @@ class WeaponSpeedController(Node):
             10
         )
         
-        # Create subscribers for poses
+        # Create subscribers
         self.goal_pose_sub = self.create_subscription(
             PoseStamped,
             'goal_pose',
@@ -37,6 +38,13 @@ class WeaponSpeedController(Node):
             PoseStamped,
             'camera/pose',
             self.robot_pose_callback,
+            10
+        )
+        
+        self.weapon_armed_sub = self.create_subscription(
+            Bool,
+            'weapon/armed',
+            self.weapon_armed_callback,
             10
         )
         
@@ -63,6 +71,11 @@ class WeaponSpeedController(Node):
             self.get_logger().info("camera/pose topic is now available")
         self.current_robot_pose = msg.pose
     
+    def weapon_armed_callback(self, msg):
+        self.weapon_armed = msg.data
+        status = "ARMED" if self.weapon_armed else "DISARMED"
+        self.get_logger().info(f"Weapon status changed: {status}")
+    
     def log_topic_status(self):
         """Log the current status of required topics"""
         if not self.goal_pose_received:
@@ -88,16 +101,29 @@ class WeaponSpeedController(Node):
         if self.get_clock().now().nanoseconds % 10_000_000_000 < 100_000_000:  # ~every 10 seconds
             self.log_topic_status()
         
-        distance = self.calculate_distance(self.current_goal_pose, self.current_robot_pose)
-        
         speed_msg = Float32()
         
-        if distance > self.threshold:
-            speed_msg.data = 0.1
+        if not self.weapon_armed:
+            speed_msg.data = 0.0
         else:
-            speed_msg.data = 0.69
+            distance = self.calculate_distance(self.current_goal_pose, self.current_robot_pose)
+            if distance > self.threshold:
+                speed_msg.data = 0.1
+            else:
+                speed_msg.data = 0.69
         
         self.weapon_speed_pub.publish(speed_msg)
         
-        # Only log distance/speed when we have both poses
-        if self.goal_pose_received and self.robot_pose_re
+        # Only log distance/speed when we have both poses and weapon is armed
+        if (self.goal_pose_received and self.robot_pose_received and self.weapon_armed):
+            self.get_logger().debug(f"Distance: {distance:.2f}m, Publishing speed: {speed_msg.data}")
+
+def main(args=None):
+    rclpy.init(args=args)
+    node = WeaponSpeedController()
+    rclpy.spin(node)
+    node.destroy_node()
+    rclpy.shutdown()
+
+if __name__ == '__main__':
+    main()

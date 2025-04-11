@@ -11,6 +11,9 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', ['launch/combat.launch.py']),
+        ('share/' + package_name + '/launch', ['launch/letsgo.launch.py']),
+        ('share/' + package_name + '/launch', ['launch/letsgo_sim.launch.py']),
+
         
     ],
     install_requires=['setuptools'],
