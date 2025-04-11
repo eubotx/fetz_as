@@ -23,6 +23,7 @@ setup(
     entry_points={
         'console_scripts': [
             'simple_attack = combat_strategizer.simple_attack:main',
+            'weapon_control = combat_strategizer.weapon_control:main',
         ],
     },
 )

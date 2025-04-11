@@ -17,28 +17,37 @@ class SimpleNavigator(Node):
             parameters=[
                 ('linear_kp', 0.5),
                 ('angular_kp', 1.0),
+                ('angular_ki', 0.05),  # New integral gain parameter
                 ('max_linear', 0.2),
                 ('max_angular', 1.0),
                 ('position_tolerance', 0.05),
                 ('orientation_tolerance', 0.1),
-                ('goal_frame', 'map')
+                ('goal_frame', 'map'),
+                ('integral_windup_limit', 1.0)  # Anti-windup limit
             ]
         )
         
         # Get parameters
         self.linear_kp = self.get_parameter('linear_kp').value
         self.angular_kp = self.get_parameter('angular_kp').value
+        self.angular_ki = self.get_parameter('angular_ki').value  # New integral gain
         self.max_linear = self.get_parameter('max_linear').value
         self.max_angular = self.get_parameter('max_angular').value
         self.position_tolerance = self.get_parameter('position_tolerance').value
         self.orientation_tolerance = self.get_parameter('orientation_tolerance').value
         self.goal_frame = self.get_parameter('goal_frame').value
+        self.integral_windup_limit = self.get_parameter('integral_windup_limit').value
         
         # Current state
         self.current_pose = None
         self.current_pose_header = None
         self.goal_pose = None
         self.goal_pose_header = None
+        
+        # Control variables
+        self.yaw_integral = 0.0  # Integral term accumulator
+        self.last_yaw_error = 0.0  # For derivative term if we add PID later
+        self.last_time = self.get_clock().now()  # For timing calculations
         
         # TF2 listener
         self.tf_buffer = Buffer()
@@ -67,13 +76,15 @@ class SimpleNavigator(Node):
 
     def pose_callback(self, msg):
         """Store the current robot pose from camera"""
-        self.current_pose = msg.pose  # Changed from msg.pose.pose to msg.pose
+        self.current_pose = msg.pose
         self.current_pose_header = msg.header
         
     def goal_callback(self, msg):
         """Store the goal pose"""
         self.goal_pose = msg.pose
         self.goal_pose_header = msg.header
+        # Reset integral term when new goal is received
+        self.yaw_integral = 0.0
         #self.get_logger().info(f"New goal received: {self.goal_pose.position}")
 
     def control_loop(self):
@@ -88,7 +99,7 @@ class SimpleNavigator(Node):
         try:
             # Get current position in goal frame
             transform = self.tf_buffer.lookup_transform(
-                self.goal_pose_header.frame_id,  # Changed to use goal's frame
+                self.goal_pose_header.frame_id,
                 self.current_pose_header.frame_id,
                 rclpy.time.Time())
                 
@@ -102,13 +113,31 @@ class SimpleNavigator(Node):
             current_yaw = self.quaternion_to_yaw(self.current_pose.orientation)
             yaw_error = self.normalize_angle(desired_yaw - current_yaw)
             
+            # Calculate time difference for integral term
+            now = self.get_clock().now()
+            dt = (now - self.last_time).nanoseconds * 1e-9  # Convert to seconds
+            self.last_time = now
+            
+            # Update integral term with anti-windup
+            if abs(yaw_error) < math.pi/2:  # Only integrate when error is reasonable
+                self.yaw_integral += yaw_error * dt
+                # Apply anti-windup limit
+                self.yaw_integral = max(min(self.yaw_integral, self.integral_windup_limit), 
+                                     -self.integral_windup_limit)
+            else:
+                # Reset integral term if error is too large
+                self.yaw_integral = 0.0
+            
             # Generate commands
             cmd = Twist()
             
             if distance > self.position_tolerance:
                 # Point towards goal first
                 if abs(yaw_error) > self.orientation_tolerance:
-                    cmd.angular.z = max(min(self.angular_kp * yaw_error, self.max_angular), -self.max_angular)
+                    # PI control for angular velocity
+                    angular_cmd = (self.angular_kp * yaw_error + 
+                                 self.angular_ki * self.yaw_integral)
+                    cmd.angular.z = max(min(angular_cmd, self.max_angular), -self.max_angular)
                 else:
                     cmd.linear.x = max(min(self.linear_kp * distance, self.max_linear), -self.max_linear)
             
