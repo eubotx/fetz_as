@@ -14,10 +14,7 @@ class VideoFileSource:
         if not self.cap.isOpened():
             raise Exception(f"Error: Could not open video file: {options['frame_path']}.")
 
-    def get_frame(self, delay_ms=0):
-        if cv2.waitKey(delay_ms) == ord('c'):
-            pass
-
+    def get_frame(self):
         ret, frame = self.cap.read()
         if not ret:
             print("Error: Could not read frame.")

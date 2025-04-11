@@ -1,3 +1,4 @@
+import timeit
 import cv2
 import numpy as np
 
@@ -62,7 +63,6 @@ class ImageRectification:
             f"Frame shape {frame.shape[0:2]} does not match calibration resolution {self.calibration_data['resolution']}"
 
         # cv2.imshow("Distorted Frame", frame)
-        import timeit
         start_time = timeit.default_timer()
         frame = cv2.remap(frame, self.map1, self.map2,
                           interpolation=cv2.INTER_LINEAR,

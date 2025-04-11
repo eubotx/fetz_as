@@ -1,18 +1,37 @@
 import numpy as np
 import cv2
 
+import heapq
+
+class MedianEstimator:
+    def __init__(self):
+        self.low = []  # Max-heap (invert values)
+        self.high = [] # Min-heap
+
+    def add(self, num):
+        heapq.heappush(self.low, -num)
+        heapq.heappush(self.high, -heapq.heappop(self.low))
+
+        if len(self.low) < len(self.high):
+            heapq.heappush(self.low, -heapq.heappop(self.high))
+
+    def get_median(self):
+        if len(self.low) == len(self.high):
+            return (-self.low[0] + self.high[0]) / 2
+        return -self.low[0]
+
+
 class DiffDetector:
     def __init__(self):
         self.static_back = None
         self.img = None
 
-    def track(self, image_gray, debug_image=None):
+    def track(self, image_gray, ignore_polygon, debug_image=None):
         # Our operations on the frame come here
-        image_gray = cv2.cvtColor(debug_image, cv2.COLOR_BGR2GRAY)
         image_gray = cv2.GaussianBlur(image_gray, (11, 11), 25)
         if self.static_back is None:
             self.static_back = image_gray
-            return
+            # return
 
         # cv2.imshow('static_back', self.static_back)
 
@@ -25,12 +44,19 @@ class DiffDetector:
         # current frame is greater than 30 it will show white color(255)
         thresh_frame = cv2.threshold(diff_frame, 30, 255, cv2.THRESH_BINARY)[1]
         # thresh_frame = cv2.dilate(thresh_frame, None, iterations=2)
-        cv2.imshow('DiffDetector: thresh_frame', thresh_frame)
+        if debug_image is not None:
+            cv2.imshow('DiffDetector: thresh_frame', thresh_frame)
+
+        if ignore_polygon is not None:
+            # Mask shapes from thresh frame
+            cv2.fillPoly(thresh_frame, [np.array(ignore_polygon).astype(np.int32)], 0)
+            if debug_image is not None:
+                cv2.imshow('DiffDetector: thresh_frame+ignore', thresh_frame)
 
         # Finding contour of moving object
         cnts, _ = cv2.findContours(thresh_frame.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         print(f"Number of contours: {len(cnts)}")
-        individual_contours = []
+        bounding_rect = []
         for contour in cnts:
             if cv2.contourArea(contour) < 10 * 10:
                 continue
@@ -47,32 +73,33 @@ class DiffDetector:
             # cv2.drawContours(frame, [cv2.boxPoints(rect).astype(int)], -1, (255, 0, 0), 3)
 
             ###
-            individual_contours.append(rect)
+            bounding_rect.append(rect)
             i, j = (0, 1)
-            while i < len(individual_contours):
-                while j < len(individual_contours):
-                    inter = self.intersect(individual_contours[i], individual_contours[j])
+            while i < len(bounding_rect):
+                while j < len(bounding_rect):
+                    inter = self.intersect(bounding_rect[i], bounding_rect[j])
                     if inter is not None:
-                        individual_contours[i] = inter
-                        individual_contours.pop(j)
+                        bounding_rect[i] = inter
+                        bounding_rect.pop(j)
                         break
                     j += 1
-                if j >= len(individual_contours):
+                if j >= len(bounding_rect):
                     i += 1
                     j = i + 1
 
         if debug_image is not None:
             # Draw individual contours in yellow
-            for individual_contour in individual_contours:
+            for individual_contour in bounding_rect:
                 (x, y, w, h) = individual_contour
                 cv2.rectangle(debug_image, (x, y), (x + w, y + h), (0, 255, 255), 1)
 
             # # Draw all contours in green
             # cv2.drawContours(frame, cnts, -1, (0, 255, 0), 3)
+            cv2.imshow("DiffDetector Debug Image", debug_image)
 
         self.static_back = image_gray
 
-        return {"boxDetections": individual_contours, "debug_image": debug_image}
+        return bounding_rect
 
     # define a function that checks if two rectangles defined by (x,y,w,h) intersect
     def intersect(self, r1, r2, expand=10):
