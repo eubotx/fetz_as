@@ -73,7 +73,7 @@ def generate_launch_description():
         executable='micro_ros_agent',
         name='micro_ros_agent',
         output='screen',
-        arguments=['udp4', '--port', '8888', '--dev', '192.168.8.210']
+        arguments=['udp4', '--port', '8888', '--dev', '	192.168.1.103']  #192.168.8.210
     )
 
     # Build launch description
