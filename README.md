@@ -299,3 +299,5 @@ python3 -m venv venv
 source src/detection/detection/venv/bin/activate
 
 pip install src/detection/.
+
+ros2 run tf2_ros static_transform_publisher 0 0 0 0 0 0 1 map odom

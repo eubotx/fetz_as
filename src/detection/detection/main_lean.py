@@ -72,6 +72,14 @@ class DetectionNode(Node):
         )
         cv2.arrowedLine(frame, center, forward_end, (0, 255, 0), 5)
 
+    def transform_coordinates(self, point):
+        """Transform coordinates from image space (top-left origin) to arena space (bottom-right origin)"""
+        return (self.arena_width - point[0], self.arena_height - point[1])
+
+    def transform_yaw(self, yaw):
+        """Transform yaw angle to match the flipped coordinate system"""
+        return math.pi - yaw
+
     def process_frame(self):
         frame = self.frame_source.get_frame()
         if frame is None:
@@ -87,29 +95,36 @@ class DetectionNode(Node):
         robot_tag = self.options['robot_tag']
         for detection in april_tag_detections:
             if detection.tag_family.decode() == robot_tag['family'] and detection.tag_id == robot_tag['id']:
-                center = tuple(detection.center.astype(int))
+                # Get original detection in image coordinates
+                img_center = tuple(detection.center.astype(int))
                 R = detection.pose_R
                 yaw = math.atan2(R[1, 0], R[0, 0])
                 offset_yaw = yaw - math.pi / 2  # Adjust for forward-facing direction
 
-                # Draw and debug
+                # Transform to arena coordinates
+                arena_center = self.transform_coordinates(img_center)
+                arena_yaw = self.transform_yaw(offset_yaw)
+
+                # Draw and debug (using image coordinates for visualization)
                 robot_img = transformed.copy()
-                cv2.circle(robot_img, center, 5, (0, 0, 255), -1)
-                self.draw_forward_direction_axis(robot_img, center, -offset_yaw)
+                cv2.circle(robot_img, img_center, 5, (0, 0, 255), -1)
+                self.draw_forward_direction_axis(robot_img, img_center, -offset_yaw)
                 cv2.putText(robot_img, f"Yaw: {offset_yaw:.2f} rad", (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2.putText(robot_img, f"Arena Pos: {arena_center}", (10, 70),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                 cv2.imshow("Robot Pose", robot_img)
 
-                # Prepare PoseStamped message
+                # Prepare PoseStamped message with arena coordinates
                 pose_msg = PoseStamped()
-                pose_msg.header.frame_id = "camera_frame"
+                pose_msg.header.frame_id = "map"
                 pose_msg.header.stamp = self.get_clock().now().to_msg()
-                pose_msg.pose.position.x = float(center[0])
-                pose_msg.pose.position.y = float(center[1])
+                pose_msg.pose.position.x = float(arena_center[0])/450.0
+                pose_msg.pose.position.y = float(arena_center[1])/450.0
                 pose_msg.pose.position.z = 0.0
 
-                # Convert yaw to quaternion
-                qx, qy, qz, qw = euler_to_quaternion(0.0, 0.0, offset_yaw)
+                # Convert arena yaw to quaternion
+                qx, qy, qz, qw = euler_to_quaternion(0.0, 0.0, arena_yaw)
                 pose_msg.pose.orientation.x = qx
                 pose_msg.pose.orientation.y = qy
                 pose_msg.pose.orientation.z = qz
@@ -138,3 +153,7 @@ def main(args=None):
         cv2.destroyAllWindows()
         node.destroy_node()
         rclpy.shutdown()
+
+
+if __name__ == '__main__':
+    main()
