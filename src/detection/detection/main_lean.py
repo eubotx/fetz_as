@@ -213,8 +213,8 @@ class DetectionNode(Node):
         self.enemy_pub.publish(enemy_msg)
 
         # Draw and debug (using image coordinates for visualization)
-        arena_size_m = 1.5
-        metersToPixels = 200
+        arena_size_m = 3
+        metersToPixels = 100
         robot_arena = np.zeros(np.array([metersToPixels * arena_size_m, metersToPixels * arena_size_m, 3]).astype(int))
         robotInWorld2D = (metersToPixels * robot_detection['worldFromRobot'].t[0:2]).astype(int).squeeze()
         robotXInWorld2D = (metersToPixels * robotXInWorld[0:2]).astype(int).squeeze()

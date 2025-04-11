@@ -136,7 +136,7 @@ def draw_outline(outline, image, text=None, color=(0, 255, 0)):
 class RobotDetector():
     def __init__(self, options: dict, calibration):
         self.robot_tags = options['robot_tags']
-        self.robot_outline = 0.1 * np.array([[0,-4,0],
+        self.robot_outline = 0.13 * np.array([[0,-4,0],
                                               [2,0,0],
                                               [2, 1, 0],
                                               [-2, 1, 0],
