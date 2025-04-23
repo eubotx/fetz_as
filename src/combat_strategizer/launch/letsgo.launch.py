@@ -61,12 +61,13 @@ def generate_launch_description():
         output='screen'
     )
 
-    
+    """
     detection = Node(
-        package='combat_strategizer',
+        package='detection',
         executable='main_lean',
         name='weapon_control',
     )
+    """
     
 
     combat_strategizer = Node(
@@ -113,7 +114,7 @@ def generate_launch_description():
     # Build launch description
     ld = LaunchDescription()
     ld.add_action(map)
-    ld.add_action(detection)
+    #ld.add_action(detection)
     ld.add_action(combat_strategizer)
     ld.add_action(weapon_control)
     ld.add_action(simple_navigator)
